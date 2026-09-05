@@ -29,11 +29,19 @@ Add the provider keys you intend to use. `ANTHROPIC_API_KEY` is required for cha
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Reasoning, orchestration, streaming, and compaction |
 | `PERPLEXITY_API_KEY` | Wider web research |
 | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` | Image generation |
-| `MISTRAL_API_KEY`, `MISTRAL_STT_MODEL` | Ephemeral realtime transcription sessions |
+| `MISTRAL_API_KEY` | Server-only Mistral key used to mint short-lived browser credentials (required for voice) |
+| `MISTRAL_STT_MODEL` | Must be `voxtral-mini-transcribe-realtime-2602` (the only model supported by this client) |
 | `KN_DOCS_REVALIDATE_SECONDS` | Canonical documentation fetch cache (default 3600s) |
 | `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at six) |
 
 No provider master key is public. Never prefix one with `NEXT_PUBLIC_`.
+
+For Vercel, add `MISTRAL_API_KEY` and
+`MISTRAL_STT_MODEL=voxtral-mini-transcribe-realtime-2602` in **Project Settings →
+Environment Variables** for each environment where voice input is enabled, then
+redeploy. Neither variable is a `NEXT_PUBLIC_` variable. The application negotiates
+WebM/Opus audio and is intentionally pinned to Voxtral Mini Transcribe Realtime
+`2602`; changing the model without updating the realtime wire contract is rejected.
 
 ## Klarna documentation corpus
 

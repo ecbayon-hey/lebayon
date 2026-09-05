@@ -1,6 +1,48 @@
 "use client";
-import { FormEvent,useEffect,useRef,useState } from "react";import { Mic,Send,X } from "lucide-react";import { Waveform } from "./waveform";
-export function Composer({onSend,disabled,resetKey}:{onSend:(v:string)=>void;disabled:boolean;resetKey:number}){const [text,setText]=useState("");const [recording,setRecording]=useState(false);const [error,setError]=useState("");const [elapsed,setElapsed]=useState(0);const [analyser,setAnalyser]=useState<AnalyserNode|null>(null);const cleanup=useRef<()=>void>(()=>{});useEffect(()=>{setText("");cleanup.current()},[resetKey]);useEffect(()=>{if(!recording)return;const n=setInterval(()=>setElapsed(v=>v+1),1000);return()=>clearInterval(n)},[recording]);
- const stop=(cancel=false)=>{cleanup.current();setRecording(false);setAnalyser(null);setElapsed(0);if(cancel)setText("")};
- const start=async()=>{setError("");try{const stream=await navigator.mediaDevices.getUserMedia({audio:{echoCancellation:true,noiseSuppression:true}});const context=new AudioContext();const source=context.createMediaStreamSource(stream);const node=context.createAnalyser();node.fftSize=512;source.connect(node);setAnalyser(node);const session=await fetch("/api/stt/session",{method:"POST"});if(!session.ok)throw new Error((await session.json()).error||"Voice session unavailable");const {url,token}=await session.json();const socket=new WebSocket(url,token?["mistral-realtime",token]:undefined);const recorder=new MediaRecorder(stream,{mimeType:MediaRecorder.isTypeSupported("audio/webm;codecs=opus")?"audio/webm;codecs=opus":undefined});socket.onopen=()=>recorder.start(250);recorder.ondataavailable=async e=>{if(socket.readyState===1&&e.data.size){const bytes=new Uint8Array(await e.data.arrayBuffer());let binary="";bytes.forEach(b=>binary+=String.fromCharCode(b));socket.send(JSON.stringify({type:"input_audio_buffer.append",audio:btoa(binary)}))}};socket.onmessage=e=>{try{const d=JSON.parse(e.data);const value=d.text||d.transcript||d.delta;if(typeof value==="string")setText(t=>d.type?.includes("delta")?t+value:value)}catch{}};socket.onerror=()=>setError("Live transcription lost its connection. Your recording was not sent.");cleanup.current=()=>{if(recorder.state!=="inactive")recorder.stop();socket.close();stream.getTracks().forEach(t=>t.stop());void context.close()};setRecording(true)}catch(e){setError(e instanceof Error?e.message:"Microphone access failed.");setRecording(false)}};
- const submit=(e:FormEvent)=>{e.preventDefault();if(text.trim()&&!disabled){onSend(text.trim());setText("")}};return <div className="composer-wrap"><form className="composer" onSubmit={submit}>{recording?<div className="voice"><span className="record-label" role="status">Recording {Math.floor(elapsed/60)}:{String(elapsed%60).padStart(2,"0")}</span><Waveform analyser={analyser}/><button type="button" className="cancel" onClick={()=>stop(true)} aria-label="Cancel recording"><X/></button><button type="button" className="stop" onClick={()=>stop(false)}>Stop</button></div>:<div className="compose-row"><textarea value={text} onChange={e=>setText(e.target.value)} placeholder="Ask about Klarna Network…" aria-label="Message LeBayon" rows={1} onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();submit(e)}}}/><button type="button" className="mic" onClick={start} aria-label="Start voice transcription"><Mic size={20}/></button><button className="send" disabled={!text.trim()||disabled} aria-label="Send message"><Send size={19}/></button></div>}{error&&<div className="error" role="alert">{error}</div>}<p className="privacy">Chats live only in this session and aren&apos;t stored by LeBayon.</p></form></div>}
+
+import { FormEvent, useEffect, useState } from "react";
+import { Mic, Send, X } from "lucide-react";
+import { Waveform } from "./waveform";
+import { useRealtimeTranscription } from "./use-realtime-transcription";
+
+export function Composer({ onSend, disabled, resetKey }: {
+  onSend: (value: string) => void;
+  disabled: boolean;
+  resetKey: number;
+}) {
+  const [text, setText] = useState("");
+  const voice = useRealtimeTranscription(text, setText);
+  const active = !["idle", "failed", "expired"].includes(voice.state);
+
+  useEffect(() => {
+    setText("");
+    voice.reset();
+    // resetKey intentionally owns this lifecycle; voice.reset is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetKey]);
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (text.trim() && !disabled) {
+      onSend(text.trim());
+      setText("");
+    }
+  };
+
+  return <div className="composer-wrap"><form className="composer" onSubmit={submit}>
+    {active ? <div className="voice">
+      <span className="record-label" role="status">
+        {voice.state === "recording" ? `Recording ${Math.floor(voice.elapsed / 60)}:${String(voice.elapsed % 60).padStart(2, "0")}` : voice.state.replace("-", " ")}
+      </span>
+      <Waveform analyser={voice.analyser} />
+      <button type="button" className="cancel" onClick={voice.cancel} aria-label="Cancel recording"><X /></button>
+      <button type="button" className="stop" onClick={voice.stop} disabled={voice.state !== "recording"}>Stop</button>
+    </div> : <div className="compose-row">
+      <textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="Ask about Klarna Network…" aria-label="Message LeBayon" rows={1} onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey) { event.preventDefault(); submit(event); } }} />
+      <button type="button" className="mic" onClick={voice.start} aria-label="Start voice transcription"><Mic size={20} /></button>
+      <button className="send" disabled={!text.trim() || disabled} aria-label="Send message"><Send size={19} /></button>
+    </div>}
+    {voice.error && <div className="error" role="alert">{voice.error}</div>}
+    <p className="privacy">Chats live only in this session and aren&apos;t stored by LeBayon.</p>
+  </form></div>;
+}
