@@ -17,8 +17,10 @@ export function valid(input: string, base = ROOT): string | null {
   } catch { return null; }
 }
 const clean = (value: string) => value.replace(/\u00a0/g, " ").replace(/[ \t]+/g, " ").replace(/ *\n */g, "\n").trim();
-function tableMarkdown($: cheerio.CheerioAPI, element: cheerio.Element) {
-  const rows: string[][] = []; $(element).find("tr").each((_, row) => { rows.push($(row).find("th,td").map((__, cell) => clean($(cell).text())).get()); });
+type CheerioSelection = ReturnType<cheerio.CheerioAPI>;
+
+function tableMarkdown($: cheerio.CheerioAPI, table: CheerioSelection) {
+  const rows: string[][] = []; table.find("tr").each((_, row) => { rows.push($(row).find("th,td").map((__, cell) => clean($(cell).text())).get()); });
   if (!rows.length) return ""; const width = Math.max(...rows.map((row) => row.length)); const normalized = rows.map((row) => [...row, ...Array(width - row.length).fill("")]);
   return [normalized[0], Array(width).fill("---"), ...normalized.slice(1)].map((row) => `| ${row.map((cell) => cell.replace(/\|/g, "\\|")).join(" | ")} |`).join("\n");
 }
@@ -37,7 +39,7 @@ export function extractPage(html: string, requestedUrl: string): { canonicalUrl:
   const title = clean(main.find("h1").first().text()) || clean($("title").text()); let heading = title; let blocks: string[] = []; const chunks: DocChunk[] = [];
   const flush = () => { splitText(blocks.join("\n\n")).forEach((text, index) => chunks.push({ id: stableId(canonicalUrl, heading, index), title, heading, url: canonicalUrl, text })); blocks = []; };
   main.find("h1,h2,h3,h4,p,pre,table,li").each((_, element) => { if ($(element).parents("pre,table,li").length) return; const tag = element.tagName.toLowerCase();
-    if (/^h[1-4]$/.test(tag)) { flush(); heading = clean($(element).text()) || heading; return; } let text = tag === "table" ? tableMarkdown($, element) : clean($(element).text());
+    if (/^h[1-4]$/.test(tag)) { flush(); heading = clean($(element).text()) || heading; return; } let text = tag === "table" ? tableMarkdown($, $(element)) : clean($(element).text());
     if (tag === "pre" && text) text = `\`\`\`\n${text}\n\`\`\``; if (tag === "li" && text) text = `- ${text}`; if (text) blocks.push(text);
   }); flush(); return { canonicalUrl, links, chunks };
 }
