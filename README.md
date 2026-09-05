@@ -69,6 +69,10 @@ After changing a Vercel environment variable, redeploy: environment changes do n
 already-built deployments. A `503` from `/api/chat` or `/api/stt/session` now explicitly
 means the corresponding key is absent; a `502` from the voice route means Mistral rejected
 the session request (check model access, quota, and the sanitized Vercel log metadata).
+Chat failures are logged by the server function in **Vercel → Logs**, not only in the
+browser console. Every chat response includes an `X-Request-Id`; provider failures show
+the same reference in the chat, browser console, and sanitized server log so the three
+views can be correlated without logging prompts or API keys.
 
 ## Checks
 
