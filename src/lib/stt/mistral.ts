@@ -1,6 +1,7 @@
 import "server-only";
 
 import { z } from "zod";
+import { optionalSecret, optionalValue } from "@/lib/config/env";
 
 export const VOXTRAL_REALTIME_MODEL = "voxtral-mini-transcribe-realtime-2602";
 export const VOXTRAL_REALTIME_ENDPOINT =
@@ -35,10 +36,10 @@ function sanitizedCode(value: unknown) {
 }
 
 export async function createRealtimeSession() {
-  const key = process.env.MISTRAL_API_KEY;
+  const key = optionalSecret("MISTRAL_API_KEY");
   if (!key) throw new RealtimeSessionError("MISTRAL_API_KEY is not configured");
 
-  const model = process.env.MISTRAL_STT_MODEL || VOXTRAL_REALTIME_MODEL;
+  const model = optionalValue("MISTRAL_STT_MODEL", VOXTRAL_REALTIME_MODEL);
   if (model !== VOXTRAL_REALTIME_MODEL) {
     throw new RealtimeSessionError(`Unsupported MISTRAL_STT_MODEL: ${model}`);
   }

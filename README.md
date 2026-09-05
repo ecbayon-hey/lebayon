@@ -55,6 +55,21 @@ The crawler starts at all seven canonical Klarna Network roots, follows only `do
 
 Add practical internal context to `knowledge/eddy-notes.md`. Date and link notes where possible. Eddy notes are secondary context and never override current public API contracts.
 
+## Deployment diagnostics
+
+Before deploying, validate the exact environment visible to the application:
+
+```bash
+npm run check:env
+```
+
+The command never prints secret values. Chat requires `ANTHROPIC_API_KEY`; voice, web
+research, and image generation remain optional and report their missing provider key.
+After changing a Vercel environment variable, redeploy: environment changes do not alter
+already-built deployments. A `503` from `/api/chat` or `/api/stt/session` now explicitly
+means the corresponding key is absent; a `502` from the voice route means Mistral rejected
+the session request (check model access, quota, and the sanitized Vercel log metadata).
+
 ## Checks
 
 ```bash
