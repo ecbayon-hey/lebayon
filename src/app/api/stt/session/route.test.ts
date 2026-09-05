@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { POST } from "./route";
+import { GET, POST } from "./route";
 
 const request = () => new Request("http://localhost/api/stt/session", { method: "POST" });
 
@@ -16,11 +16,17 @@ describe("POST /api/stt/session", () => {
     delete process.env.MISTRAL_STT_MODEL;
   });
 
+  it("reports whether voice is configured without exposing the key", async () => {
+    expect(await (await GET()).json()).toEqual({ available: true });
+    delete process.env.MISTRAL_API_KEY;
+    expect(await (await GET()).json()).toEqual({ available: false });
+  });
+
   it("returns 503 without server credentials", async () => {
     delete process.env.MISTRAL_API_KEY;
     const response = await POST(request());
     expect(response.status).toBe(503);
-    expect(await response.json()).toEqual({ error: "Voice transcription is unavailable right now." });
+    expect(await response.json()).toEqual({ error: "Voice transcription is not configured on this deployment." });
   });
 
   it("hides provider rejection details and logs sanitized metadata", async () => {

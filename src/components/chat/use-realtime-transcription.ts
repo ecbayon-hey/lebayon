@@ -19,6 +19,8 @@ type Session = {
   audioFormat: "audio/webm;codecs=opus";
 };
 
+type ApiError = { error?: string };
+
 type Resources = {
   stream?: MediaStream;
   recorder?: MediaRecorder;
@@ -110,7 +112,10 @@ export function useRealtimeTranscription(text: string, setText: (value: string) 
       setState("connecting");
 
       const response = await fetch("/api/stt/session", { method: "POST" });
-      if (!response.ok) throw new Error("Voice session unavailable.");
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({})) as ApiError;
+        throw new Error(body.error || "Voice session unavailable.");
+      }
       const session = (await response.json()) as Session;
       if (id !== run.current) return;
 
@@ -162,7 +167,9 @@ export function useRealtimeTranscription(text: string, setText: (value: string) 
     } catch (caught) {
       if (id !== run.current) return;
       const denied = caught instanceof DOMException && caught.name === "NotAllowedError";
-      finish("failed", denied ? "Microphone permission was denied." : "Voice transcription could not start.");
+      finish("failed", denied
+        ? "Microphone permission was denied."
+        : caught instanceof Error ? caught.message : "Voice transcription could not start.");
     }
   }, [dispose, finish, setText, text]);
 
