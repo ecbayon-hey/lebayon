@@ -58,6 +58,6 @@ npm run build
 
 ## Vercel, privacy, and access
 
-Import this repository into Vercel and configure the same environment variables. Route handlers need no persistent server and use server-only credentials. Chats are not written to a database, filesystem, cookies, or browser storage; refreshing or **New chat** clears the thread. Requests still travel to the selected AI providers, so do not imply provider-side zero retention without separately confirmed agreements.
+Import this repository into Vercel and configure the same environment variables. Route handlers need no persistent server and use server-only credentials. Enable **Web Analytics** for the project in the Vercel dashboard as well; installing the application package does not enable the project setting. After deployment, visit multiple routes or reload the application, then confirm that page views appear in the Vercel Analytics dashboard. Browser content blockers can block analytics requests, so disable them for the site if they prevent local verification. Chats are not written to a database, filesystem, cookies, or browser storage; refreshing or **New chat** clears the thread. Requests still travel to the selected AI providers, so do not imply provider-side zero retention without separately confirmed agreements.
 
 The app emits `noindex` metadata and a disallowing `robots.txt`, but obscurity is not access control. Enable Vercel Deployment Protection, an identity-aware proxy, or another organizational access layer before exposing an internal deployment.
