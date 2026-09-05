@@ -1,6 +1,6 @@
 # LeBayon
 
-LeBayon is a focused, session-only AI companion for Klarna Network Solution & Delivery colleagues. It combines Anthropic orchestration with an official-document-first grounding policy, live web research, inline images, diagrams, charts, and Mistral realtime transcription—inside a tactile e-ink/blueprint chat interface.
+LeBayon is a focused, session-only AI companion for Klarna Network Solution & Delivery colleagues. It combines Anthropic orchestration with an official-document-first grounding policy, live web research, inline images, diagrams, charts, and Mistral transcription—inside a tactile e-ink/blueprint chat interface.
 
 ## Architecture
 
@@ -8,7 +8,7 @@ LeBayon is a focused, session-only AI companion for Klarna Network Solution & De
 - **Anthropic Messages API** runs a server-side tool loop (maximum six iterations by default) and streams typed SSE events to the browser.
 - **Klarna docs** use a generated MiniSearch corpus for discovery, followed by a cached server-side fetch of matching canonical pages whenever possible. Official docs outrank all other sources.
 - **Perplexity** provides wider/current web research; **OpenAI GPT Image** provides inline generated images.
-- **Mistral Voxtral Realtime** uses an ephemeral credential minted by `/api/stt/session`; the master key never reaches browser code.
+- **Mistral Voxtral** transcribes completed MediaRecorder audio through the server-only `/api/transcribe` route. Web Audio drives the live waveform independently, and transcripts remain editable until Send is pressed.
 - Mermaid and validated Recharts artifacts render inline. Heavy Mermaid code is dynamically loaded.
 - Messages and rolling summaries live in React memory only. Only theme preference uses `localStorage`.
 
@@ -29,19 +29,18 @@ Add the provider keys you intend to use. `ANTHROPIC_API_KEY` is required for cha
 | `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Reasoning, orchestration, streaming, and compaction |
 | `PERPLEXITY_API_KEY` | Wider web research |
 | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` | Image generation |
-| `MISTRAL_API_KEY` | Server-only Mistral key used to mint short-lived browser credentials (required for voice) |
-| `MISTRAL_STT_MODEL` | Must be `voxtral-mini-transcribe-realtime-2602` (the only model supported by this client) |
+| `MISTRAL_API_KEY` | Server-only Mistral key used for standard audio transcription |
+| `MISTRAL_STT_MODEL` | Standard transcription model (default `voxtral-mini-latest`) |
 | `KN_DOCS_REVALIDATE_SECONDS` | Canonical documentation fetch cache (default 3600s) |
 | `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at six) |
 
 No provider master key is public. Never prefix one with `NEXT_PUBLIC_`.
 
-For Vercel, add `MISTRAL_API_KEY` and
-`MISTRAL_STT_MODEL=voxtral-mini-transcribe-realtime-2602` in **Project Settings →
-Environment Variables** for each environment where voice input is enabled, then
-redeploy. Neither variable is a `NEXT_PUBLIC_` variable. The application negotiates
-WebM/Opus audio and is intentionally pinned to Voxtral Mini Transcribe Realtime
-`2602`; changing the model without updating the realtime wire contract is rejected.
+For Vercel, add `MISTRAL_API_KEY` and optionally
+`MISTRAL_STT_MODEL=voxtral-mini-latest` in **Project Settings → Environment
+Variables**, then redeploy. Neither variable is a `NEXT_PUBLIC_` variable. The
+browser records the best supported MediaRecorder format; only the completed
+recording is uploaded, with Klarna terminology supplied as context bias.
 
 ## Klarna documentation corpus
 
@@ -51,7 +50,7 @@ The committed `knowledge/generated/klarna-docs.json` makes development usable wi
 npm run sync:kn-docs
 ```
 
-The crawler starts at all seven canonical Klarna Network roots, follows only `docs.klarna.com/klarna-network-distribution/` descendants, strips navigation, preserves headings and canonical URLs, and creates semantic text chunks. Set `KN_DOCS_MAX_PAGES` to bound a development crawl. Review the generated diff before committing; documentation structure can change.
+The crawler combines Klarna's official sitemap metadata with links embedded in the docs application's serialized navigation payload, then follows only `docs.klarna.com/klarna-network-distribution/` descendants. It refuses to overwrite the corpus when the result is merely the seven roots or lacks meaningful family/depth coverage. Set `KN_DOCS_MAX_PAGES` to bound a development crawl. Review the generated diff and its page, chunk, character, and family statistics before committing.
 
 Add practical internal context to `knowledge/eddy-notes.md`. Date and link notes where possible. Eddy notes are secondary context and never override current public API contracts.
 
@@ -66,9 +65,9 @@ npm run check:env
 The command never prints secret values. Chat requires `ANTHROPIC_API_KEY`; voice, web
 research, and image generation remain optional and report their missing provider key.
 After changing a Vercel environment variable, redeploy: environment changes do not alter
-already-built deployments. A `503` from `/api/chat` or `/api/stt/session` now explicitly
+already-built deployments. A `503` from `/api/chat` or `/api/transcribe` now explicitly
 means the corresponding key is absent; a `502` from the voice route means Mistral rejected
-the session request (check model access, quota, and the sanitized Vercel log metadata).
+the audio request (check model access, quota, and the sanitized Vercel log metadata).
 Chat failures are logged by the server function in **Vercel → Logs**, not only in the
 browser console. Every chat response includes an `X-Request-Id`; provider failures show
 the same reference in the chat, browser console, and sanitized server log so the three

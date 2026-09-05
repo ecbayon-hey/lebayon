@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useState } from "react";
 import { Mic, Send, X } from "lucide-react";
 import { Waveform } from "./waveform";
-import { useRealtimeTranscription } from "./use-realtime-transcription";
+import { useTranscription } from "./use-transcription";
 
 export function Composer({ onSend, disabled, resetKey }: {
   onSend: (value: string) => void;
@@ -11,8 +11,8 @@ export function Composer({ onSend, disabled, resetKey }: {
   resetKey: number;
 }) {
   const [text, setText] = useState("");
-  const voice = useRealtimeTranscription(text, setText);
-  const active = !["idle", "failed", "expired"].includes(voice.state);
+  const voice = useTranscription(text, setText);
+  const active = voice.state === "recording" || voice.state === "transcribing";
 
   useEffect(() => {
     setText("");
@@ -32,7 +32,7 @@ export function Composer({ onSend, disabled, resetKey }: {
   return <div className="composer-wrap"><form className="composer" onSubmit={submit}>
     {active ? <div className="voice">
       <span className="record-label" role="status">
-        {voice.state === "recording" ? `Recording ${Math.floor(voice.elapsed / 60)}:${String(voice.elapsed % 60).padStart(2, "0")}` : voice.state.replace("-", " ")}
+        {voice.state === "recording" ? `Recording ${Math.floor(voice.elapsed / 60)}:${String(voice.elapsed % 60).padStart(2, "0")}` : "Transcribing…"}
       </span>
       <Waveform analyser={voice.analyser} />
       <button type="button" className="cancel" onClick={voice.cancel} aria-label="Cancel recording"><X /></button>
