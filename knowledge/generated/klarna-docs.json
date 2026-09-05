@@ -1,0 +1,9 @@
+[
+ {"id":"integration-root","title":"Klarna Network Distribution","heading":"Integration documentation","url":"https://docs.klarna.com/klarna-network-distribution/","text":"Official Klarna Network Distribution integration documentation and guides."},
+ {"id":"management-api","title":"Klarna Management API","heading":"API reference","url":"https://docs.klarna.com/klarna-network-distribution/api/klarna-management-api/","text":"Official Management API documentation for Klarna Network Distribution."},
+ {"id":"payment-api","title":"Klarna Payment API","heading":"API reference","url":"https://docs.klarna.com/klarna-network-distribution/api/klarna-product-api-payment/","text":"Official Klarna Network Payment API documentation covering payment requests, authorization and payment transactions."},
+ {"id":"session-api","title":"Klarna Network Session API","heading":"API reference","url":"https://docs.klarna.com/klarna-network-distribution/api/klarna-product-api-network-session/","text":"Official Network Session API documentation and Klarna Network Session Token behaviour."},
+ {"id":"notifications-api","title":"Klarna Notifications API","heading":"API reference","url":"https://docs.klarna.com/klarna-network-distribution/api/klarna-notifications-api/","text":"Official Notifications API and webhook documentation."},
+ {"id":"identity-api","title":"Klarna Identity API","heading":"API reference","url":"https://docs.klarna.com/klarna-network-distribution/api/klarna-product-api-identity/","text":"Official Klarna Network Identity API documentation."},
+ {"id":"web-sdk","title":"Klarna Network Web SDK","heading":"Web SDK","url":"https://docs.klarna.com/klarna-network-distribution/web-sdk/","text":"Official current Web SDK methods, widgets, callbacks and event documentation including customer, payment and network functionality."}
+]

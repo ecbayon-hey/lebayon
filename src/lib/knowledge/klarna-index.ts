@@ -1,0 +1,3 @@
+import "server-only";import MiniSearch from "minisearch";import corpus from "../../../knowledge/generated/klarna-docs.json";
+export type DocChunk={id:string;title:string;heading:string;url:string;text:string};const chunks=corpus as DocChunk[];let search:MiniSearch<DocChunk>|undefined;
+export function searchIndex(query:string,limit=5){search??=new MiniSearch<DocChunk>({fields:["title","heading","text"],storeFields:["title","heading","url","text"],searchOptions:{boost:{title:3,heading:2},fuzzy:.2,prefix:true}});if(search.documentCount===0)search.addAll(chunks);return search.search(query).slice(0,limit).map(r=>({id:String(r.id),title:String(r.title),heading:String(r.heading),url:String(r.url),text:String(r.text)}))}

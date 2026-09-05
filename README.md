@@ -1,2 +1,63 @@
-# lebayon
-LeBayon AI assistant with KN expertise
+# LeBayon
+
+LeBayon is a focused, session-only AI companion for Klarna Network Solution & Delivery colleagues. It combines Anthropic orchestration with an official-document-first grounding policy, live web research, inline images, diagrams, charts, and Mistral realtime transcription—inside a tactile e-ink/blueprint chat interface.
+
+## Architecture
+
+- **Next.js App Router + React + TypeScript** deploy directly to Vercel.
+- **Anthropic Messages API** runs a server-side tool loop (maximum six iterations by default) and streams typed SSE events to the browser.
+- **Klarna docs** use a generated MiniSearch corpus for discovery, followed by a cached server-side fetch of matching canonical pages whenever possible. Official docs outrank all other sources.
+- **Perplexity** provides wider/current web research; **OpenAI GPT Image** provides inline generated images.
+- **Mistral Voxtral Realtime** uses an ephemeral credential minted by `/api/stt/session`; the master key never reaches browser code.
+- Mermaid and validated Recharts artifacts render inline. Heavy Mermaid code is dynamically loaded.
+- Messages and rolling summaries live in React memory only. Only theme preference uses `localStorage`.
+
+## Local setup
+
+```bash
+npm install
+cp .env.example .env.local
+npm run dev
+```
+
+Add the provider keys you intend to use. `ANTHROPIC_API_KEY` is required for chat; individual tools return a controlled error when their provider is not configured. Model names are environment-configurable because provider availability changes.
+
+## Environment
+
+| Variable | Purpose |
+| --- | --- |
+| `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL` | Reasoning, orchestration, streaming, and compaction |
+| `PERPLEXITY_API_KEY` | Wider web research |
+| `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` | Image generation |
+| `MISTRAL_API_KEY`, `MISTRAL_STT_MODEL` | Ephemeral realtime transcription sessions |
+| `KN_DOCS_REVALIDATE_SECONDS` | Canonical documentation fetch cache (default 3600s) |
+| `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at six) |
+
+No provider master key is public. Never prefix one with `NEXT_PUBLIC_`.
+
+## Klarna documentation corpus
+
+The committed `knowledge/generated/klarna-docs.json` makes development usable without a startup crawl. Regenerate it explicitly:
+
+```bash
+npm run sync:kn-docs
+```
+
+The crawler starts at all seven canonical Klarna Network roots, follows only `docs.klarna.com/klarna-network-distribution/` descendants, strips navigation, preserves headings and canonical URLs, and creates semantic text chunks. Set `KN_DOCS_MAX_PAGES` to bound a development crawl. Review the generated diff before committing; documentation structure can change.
+
+Add practical internal context to `knowledge/eddy-notes.md`. Date and link notes where possible. Eddy notes are secondary context and never override current public API contracts.
+
+## Checks
+
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+## Vercel, privacy, and access
+
+Import this repository into Vercel and configure the same environment variables. Route handlers need no persistent server and use server-only credentials. Chats are not written to a database, filesystem, cookies, or browser storage; refreshing or **New chat** clears the thread. Requests still travel to the selected AI providers, so do not imply provider-side zero retention without separately confirmed agreements.
+
+The app emits `noindex` metadata and a disallowing `robots.txt`, but obscurity is not access control. Enable Vercel Deployment Protection, an identity-aware proxy, or another organizational access layer before exposing an internal deployment.
