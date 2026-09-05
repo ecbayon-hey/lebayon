@@ -1,2 +1,33 @@
-import "server-only";import {searchIndex} from "@/lib/knowledge/klarna-index";import {extractRelevantSection} from "@/lib/knowledge/klarna-html";import type {Source} from "@/lib/stream/events";
-export async function searchKlarnaDocs(query:string){const hits=searchIndex(query);const verified=await Promise.all(hits.slice(0,3).map(async hit=>{try{const response=await fetch(hit.url,{signal:AbortSignal.timeout(5500),next:{revalidate:Number(process.env.KN_DOCS_REVALIDATE_SECONDS||3600)}});if(!response.ok)throw new Error();const text=extractRelevantSection(await response.text(),hit);if(!text)throw new Error();return{...hit,text,evidence:"live" as const,liveVerified:true}}catch{return{...hit,evidence:"bundled-stale" as const,liveVerified:false}}}));const sources:Source[]=verified.map(h=>({type:"klarna",title:h.title,heading:h.heading,url:h.url}));return{matches:verified,sources,note:"Live evidence is the matching canonical section. bundled-stale evidence is the indexed snapshot returned only when live verification fails."}}
+import "server-only";
+import { klarnaDocDomains, searchIndex, type KlarnaDocDomain } from "@/lib/knowledge/klarna-index";
+import { extractRelevantSection } from "@/lib/knowledge/klarna-html";
+import type { Source } from "@/lib/stream/events";
+
+export { klarnaDocDomains };
+
+export async function searchKlarnaDocs(query: string, domain: KlarnaDocDomain = "all") {
+  const hits = searchIndex(query, 5, domain);
+  const selected = hits.slice(0, 3);
+  const verified = await Promise.all(selected.map(async (hit) => {
+    try {
+      const response = await fetch(hit.url, {
+        signal: AbortSignal.timeout(5_500),
+        next: { revalidate: Number(process.env.KN_DOCS_REVALIDATE_SECONDS || 3600) },
+      });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      const text = extractRelevantSection(await response.text(), hit);
+      if (!text) throw new Error("Matching section was not present in the live page");
+      return { ...hit, text, evidence: "live" as const, liveVerified: true };
+    } catch {
+      return { ...hit, evidence: "bundled-stale" as const, liveVerified: false };
+    }
+  }));
+  const sources: Source[] = verified.map((hit) => ({ type: "klarna", title: hit.title, heading: hit.heading, url: hit.url }));
+  return {
+    query,
+    domain,
+    matches: verified,
+    sources,
+    note: "live means the canonical page was fetched and its matching section extracted; bundled-stale is snapshot fallback evidence after live verification failed.",
+  };
+}

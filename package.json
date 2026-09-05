@@ -1,1 +1,45 @@
-{"name":"lebayon","version":"1.0.0","private":true,"scripts":{"dev":"next dev","build":"next build","start":"next start","lint":"eslint .","typecheck":"tsc --noEmit","test":"vitest run","sync:kn-docs":"tsx scripts/sync-klarna-docs.ts","check:env":"node --env-file-if-exists=.env.local scripts/check-env.mjs"},"dependencies":{"@anthropic-ai/sdk":"latest","@tailwindcss/postcss":"latest","@vercel/analytics":"1.5.0","cheerio":"latest","lucide-react":"latest","mermaid":"latest","minisearch":"latest","next":"latest","openai":"latest","react":"latest","react-dom":"latest","react-markdown":"latest","recharts":"latest","remark-gfm":"latest","zod":"latest"},"devDependencies":{"@eslint/eslintrc":"latest","@types/node":"latest","@types/react":"latest","@types/react-dom":"latest","eslint":"latest","eslint-config-next":"latest","tailwindcss":"latest","tsx":"latest","typescript":"latest","vitest":"latest"}}
+{
+  "name": "lebayon",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "sync:kn-docs": "tsx scripts/sync-klarna-docs.ts",
+    "check:env": "node --env-file-if-exists=.env.local scripts/check-env.mjs",
+    "check:kn-docs": "tsx scripts/check-klarna-docs.ts"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "latest",
+    "@tailwindcss/postcss": "latest",
+    "@vercel/analytics": "1.5.0",
+    "cheerio": "latest",
+    "lucide-react": "latest",
+    "mermaid": "latest",
+    "minisearch": "latest",
+    "next": "latest",
+    "openai": "latest",
+    "react": "latest",
+    "react-dom": "latest",
+    "react-markdown": "latest",
+    "recharts": "latest",
+    "remark-gfm": "latest",
+    "zod": "latest"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "latest",
+    "@types/node": "latest",
+    "@types/react": "latest",
+    "@types/react-dom": "latest",
+    "eslint": "latest",
+    "eslint-config-next": "latest",
+    "tailwindcss": "latest",
+    "tsx": "latest",
+    "typescript": "latest",
+    "vitest": "latest"
+  }
+}
