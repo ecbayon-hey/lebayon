@@ -37,7 +37,10 @@ export function extractPage(html: string, requestedUrl: string): { canonicalUrl:
   const $ = cheerio.load(html); const canonicalUrl = valid($("link[rel='canonical']").first().attr("href") ?? "", requestedUrl) ?? valid(requestedUrl) ?? requestedUrl;
   // The docs navigation is client-rendered on some releases. Search serialized app
   // data as well as anchors, without trying to understand a particular framework.
-  const serializedLinks = [...html.matchAll(/(?:https:\/\/docs\.klarna\.com)?\/klarna-network-distribution\/[a-zA-Z0-9_./%-]*/g)].map((match) => match[0]);
+  // Klarna's application payload escapes both slashes and unicode characters.
+  // Normalizing those escapes is what makes the client-rendered navigation crawlable.
+  const payload = html.replace(/\\\//g, "/").replace(/\\u002[fF]/g, "/").replace(/&quot;/g, '"');
+  const serializedLinks = [...payload.matchAll(/(?:https:\/\/docs\.klarna\.com)?\/klarna-network-distribution\/[a-zA-Z0-9_./%-]*/g)].map((match) => match[0]);
   const links = [...new Set([
     ...$("a[href]").map((_, a) => $(a).attr("href") ?? "").get(),
     ...serializedLinks,
@@ -58,7 +61,9 @@ export function sitemapUrls(xml: string, base = "https://docs.klarna.com/sitemap
 }
 
 async function discoverFromSitemaps(fetcher: typeof fetch, maxPages: number) {
-  const pending = ["https://docs.klarna.com/sitemap.xml"];
+  // The first two are currently advertised by Klarna deployments; the remaining
+  // conventional names make the sync tolerant of a docs-platform migration.
+  const pending = ["https://docs.klarna.com/sitemap.xml", "https://docs.klarna.com/sitemap-index.xml", "https://docs.klarna.com/sitemap_index.xml"];
   const seen = new Set<string>();
   const pages = new Set<string>();
   while (pending.length && seen.size < 30 && pages.size < maxPages) {
@@ -72,7 +77,7 @@ async function discoverFromSitemaps(fetcher: typeof fetch, maxPages: number) {
         if (/\.xml(?:$|\?)/i.test(location)) pending.push(location);
         else { const page = valid(location); if (page) pages.add(page); }
       }
-    } catch { /* Seed crawling can still work when the sitemap is unavailable. */ }
+    } catch { /* Application-payload discovery can still work when a sitemap is unavailable. */ }
   }
   return [...pages];
 }
@@ -92,7 +97,8 @@ export function validateCorpus(chunks: DocChunk[], minimum = 10_000) {
   const stats = corpusStats(chunks);
   const seedSet = new Set(SEEDS);
   const descendants = new Set(chunks.map((chunk) => chunk.url).filter((url) => !seedSet.has(url)));
-  if (!chunks.length || stats.characters < minimum || descendants.size === 0) {
+  const representedFamilies = Object.keys(stats.families).length;
+  if (!chunks.length || stats.characters < minimum || descendants.size < 8 || stats.pages <= SEEDS.length || representedFamilies < 3) {
     throw new Error(`Klarna sync is suspiciously shallow: ${stats.pages} pages, ${stats.chunks} chunks, ${stats.characters} characters, ${descendants.size} descendant pages; refusing to replace the corpus.`);
   }
   return stats;

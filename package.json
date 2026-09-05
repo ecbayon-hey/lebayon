@@ -11,7 +11,8 @@
     "test": "vitest run",
     "sync:kn-docs": "tsx scripts/sync-klarna-docs.ts",
     "check:env": "node --env-file-if-exists=.env.local scripts/check-env.mjs",
-    "check:kn-docs": "tsx scripts/check-klarna-docs.ts"
+    "check:kn-docs": "tsx scripts/check-klarna-docs.ts",
+    "check:kn-corpus": "tsx scripts/check-klarna-corpus.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
