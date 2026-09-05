@@ -54,7 +54,23 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+npm run test:smoke
 ```
+
+### Test matrix
+
+| Capability | Coverage |
+| --- | --- |
+| Text chat and fragmented SSE streaming | Chat shell unit tests and browser smoke tests |
+| Tool progress; official-document and web citations | Agent-loop, chat-shell, and browser tests |
+| Image artifacts; line, bar, area, pie, and donut charts | Artifact and browser tests |
+| Mermaid render success and controlled syntax failure | Artifact tests and browser success path |
+| Conversation compaction and summary updates | Agent-loop and chat-shell tests |
+| Provider failures, missing optional keys, and request limits | Provider-boundary and route tests |
+| New chat cancellation and theme persistence | Chat-shell and browser tests |
+| STT session and recording lifecycle | Provider, route, and composer tests |
+
+All provider tests mock the SDK module or `fetch` boundary; the suite never needs live credentials.
 
 ## Vercel, privacy, and access
 
