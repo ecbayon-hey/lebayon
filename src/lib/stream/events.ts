@@ -9,5 +9,5 @@ export type StreamEvent =
  | { type:"image"; url:string; alt:string }
  | { type:"chart"; chart:ChartArtifact }
  | { type:"summary_update"; summary:string }
- | { type:"error"; message:string }
+ | { type:"error"; message:string; requestId?:string }
  | { type:"done" };
