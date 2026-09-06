@@ -11,15 +11,38 @@ export const KLARNA_CONTEXT_BIAS = [
   "Sign in with Klarna", "OSM", "On-site Messaging",
 ];
 
-type SafeProviderMetadata = { status?: number; code?: string; param?: string; type?: string };
+type SafeProviderMetadata = { status?: number; message?: string; code?: string; param?: string; type?: string; requestId?: string };
 export class TranscriptionError extends Error {
   constructor(message: string, readonly metadata: SafeProviderMetadata = {}) { super(message); this.name = "TranscriptionError"; }
   get status() { return this.metadata.status; }
 }
 
 const safeString = (value: unknown) => typeof value === "string" && /^[\w.-]{1,80}$/.test(value) ? value : undefined;
+const safeMessage = (value: unknown) => typeof value === "string"
+  ? value.replace(/(?:bearer\s+)?[a-z0-9_-]{24,}/gi, "[redacted]").replace(/[\r\n]+/g, " ").slice(0, 300)
+  : undefined;
 
-export async function transcribeAudio(file: File) {
+function parseBody(body: unknown): Record<string, unknown> {
+  if (body && typeof body === "object") return body as Record<string, unknown>;
+  if (typeof body === "string") { try { const parsed: unknown = JSON.parse(body); return parsed && typeof parsed === "object" ? parsed as Record<string, unknown> : {}; } catch { return {}; } }
+  return {};
+}
+
+export function safeMistralError(error: unknown): SafeProviderMetadata {
+  const value = error as { statusCode?: unknown; status?: unknown; body?: unknown; response?: { status?: unknown; headers?: Headers }; rawResponse?: { status?: unknown; headers?: Headers }; requestId?: unknown };
+  const body = parseBody(value?.body);
+  const nested = body.error && typeof body.error === "object" ? body.error as Record<string, unknown> : body;
+  const response = value?.rawResponse ?? value?.response;
+  const status = [value?.statusCode, value?.status, response?.status].find((item) => typeof item === "number") as number | undefined;
+  return {
+    status,
+    message: safeMessage(nested.message),
+    code: safeString(nested.code), param: safeString(nested.param), type: safeString(nested.type),
+    requestId: safeString(value?.requestId) ?? safeString(response?.headers?.get("x-request-id")) ?? safeString(response?.headers?.get("request-id")),
+  };
+}
+
+export async function transcribeAudio(file: File, options: { useContextBias?: boolean } = {}) {
   const key = optionalSecret("MISTRAL_API_KEY");
   if (!key) throw new TranscriptionError("MISTRAL_API_KEY is not configured");
   const client = new Mistral({ apiKey: key });
@@ -27,19 +50,13 @@ export async function transcribeAudio(file: File) {
     const response = await client.audio.transcriptions.complete({
       model: optionalValue("MISTRAL_STT_MODEL", DEFAULT_STT_MODEL),
       file,
-      contextBias: KLARNA_CONTEXT_BIAS,
+      language: "en",
+      ...(options.useContextBias === false ? {} : { contextBias: KLARNA_CONTEXT_BIAS }),
     });
     if (typeof response.text !== "string") throw new TranscriptionError("Mistral returned a malformed transcription", { code: "malformed_response" });
     return response.text.trim();
   } catch (error) {
     if (error instanceof TranscriptionError) throw error;
-    const value = error as { statusCode?: unknown; status?: unknown; body?: { object?: string; code?: unknown; param?: unknown; type?: unknown } };
-    const status = typeof value.statusCode === "number" ? value.statusCode : typeof value.status === "number" ? value.status : undefined;
-    throw new TranscriptionError("Mistral rejected the transcription", {
-      status,
-      code: safeString(value.body?.code),
-      param: safeString(value.body?.param),
-      type: safeString(value.body?.type),
-    });
+    throw new TranscriptionError("Mistral rejected the transcription", safeMistralError(error));
   }
 }

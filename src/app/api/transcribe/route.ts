@@ -35,9 +35,11 @@ export async function POST(request: Request) {
       bytes: file.size,
       model: process.env.MISTRAL_STT_MODEL || "voxtral-mini-latest",
       upstreamStatus: provider?.metadata.status,
+      providerMessage: provider?.metadata.message,
       providerCode: provider?.metadata.code,
       providerParam: provider?.metadata.param,
       providerType: provider?.metadata.type,
+      requestId: provider?.metadata.requestId,
     });
     return Response.json(
       { error: provider?.status === undefined ? "Voice transcription is not configured on this deployment." : "The recording could not be transcribed. Please try again." },

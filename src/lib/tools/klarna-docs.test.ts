@@ -5,6 +5,7 @@ vi.mock("./perplexity", () => ({ discoverOfficialKlarnaUrls: vi.fn().mockResolve
 
 import { searchKlarnaDocs } from "./klarna-docs";
 import { extractSections } from "./klarna-docs";
+import { KLARNA_AREA_ROOTS } from "./klarna-docs";
 
 describe("live Klarna evidence", () => {
   afterEach(() => vi.restoreAllMocks());
@@ -31,5 +32,19 @@ describe("live Klarna evidence", () => {
     expect(sections[0].heading).toBe("authorizePayment");
     expect(sections[0].content).toContain("Payment Authorization flow");
     expect(sections[0].content).not.toContain("introduction");
+  });
+
+  it.each(["the websdk", "no i just cant remember how to launch the websdk", "how do I initialize WebSDK"])("fetches Web SDK first for %s", async (query) => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL | Request) => {
+      const url = String(input); calls.push(url);
+      if (url === KLARNA_AREA_ROOTS.web_sdk) return new Response("<main><h1>Web SDK</h1><h2>Initialize the Web SDK</h2><p>Load the script and initialize KlarnaSDK with your client configuration.</p></main>");
+      return new Response("<main><h1>Build the onboarding payload</h1><p>Disputes onboarding.</p></main>");
+    }));
+    const result = await searchKlarnaDocs(query, "web_sdk");
+    expect(calls[0]).toBe(KLARNA_AREA_ROOTS.web_sdk);
+    expect(result.domain).toBe("web_sdk");
+    expect(result.matches[0].url).toBe(KLARNA_AREA_ROOTS.web_sdk);
+    expect(JSON.stringify(result.sources)).not.toMatch(/disputes|onboarding/i);
   });
 });

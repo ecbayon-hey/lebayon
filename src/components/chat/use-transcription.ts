@@ -11,7 +11,11 @@ function supportedMimeType() {
   return MIME_CANDIDATES.find((type) => typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type)) ?? "";
 }
 
-/** Encodes mono browser PCM without ffmpeg; used when Safari only offers MP4 MediaRecorder. */
+export function isIOS(userAgent: string, platform = "", touchPoints = 0) {
+  return /iPad|iPhone|iPod/i.test(userAgent) || (platform === "MacIntel" && touchPoints > 1);
+}
+
+/** Encodes mono browser PCM without ffmpeg; iOS always uses this predictable container. */
 export function encodeWav(chunks: Float32Array[], sampleRate: number) {
   const samples = chunks.reduce((size, chunk) => size + chunk.length, 0);
   const buffer = new ArrayBuffer(44 + samples * 2);
@@ -70,7 +74,8 @@ export function useTranscription(text: string, setText: (value: string) => void)
       node.fftSize = 512;
       const source = context.createMediaStreamSource(stream);
       source.connect(node);
-      const mimeType = supportedMimeType();
+      const forcePcm = isIOS(navigator.userAgent, navigator.platform, navigator.maxTouchPoints);
+      const mimeType = forcePcm ? "" : supportedMimeType();
       let recorder: MediaRecorder | undefined;
       let processor: ScriptProcessorNode | undefined;
       if (mimeType) {
@@ -82,6 +87,7 @@ export function useTranscription(text: string, setText: (value: string) => void)
         processor.onaudioprocess = (event) => pcmChunks.current.push(new Float32Array(event.inputBuffer.getChannelData(0)));
         source.connect(processor);
         processor.connect(context.destination);
+        await context.resume();
       }
       resources.current = { stream, context, recorder, processor, sampleRate: context.sampleRate };
       resources.current.timer = setInterval(() => setElapsed((value) => value + 1), 1_000);
@@ -102,6 +108,10 @@ export function useTranscription(text: string, setText: (value: string) => void)
     setState("transcribing");
     const upload = async () => {
       const type = recorder?.mimeType || chunks.current[0]?.type || "audio/wav";
+      if (!recorder && pcmChunks.current.reduce((count, chunk) => count + chunk.length, 0) < 1_024) {
+        fail("No audio was captured. Please record for a little longer.");
+        return;
+      }
       const blob = recorder ? new Blob(chunks.current, { type }) : encodeWav(pcmChunks.current, sampleRate || 44_100);
       disposeAudio();
       try {

@@ -25,12 +25,12 @@ async function retrieveBeforeAnswer(route: RouteDecision, latest: string, emit: 
     emit({ type: "tool_started", tool: "search_klarna_network_docs", label: labels.search_klarna_network_docs });
     const results = [];
     for (const query of route.klarnaQueries) {
-      const result = await searchKlarnaDocs(query);
+      const result = await searchKlarnaDocs(query, route.klarnaArea ?? "integration");
       results.push(result);
       emitSources(result, emit);
     }
     if (!results.some((result) => result.matches.length)) {
-      const retry = await searchKlarnaDocs(`${latest} official Klarna Network documentation`);
+      const retry = await searchKlarnaDocs(`${latest} official Klarna Network documentation`, route.klarnaArea ?? "integration");
       results.push(retry);
       emitSources(retry, emit);
     }

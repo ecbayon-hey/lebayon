@@ -11,7 +11,7 @@ describe("POST /api/transcribe", () => {
   it("validates files before contacting Mistral", async () => { expect((await POST(request())).status).toBe(400); expect((await POST(request(new File(["x"], "x.txt", { type: "text/plain" })))).status).toBe(415); });
   it("rejects an empty recording", async () => { expect((await POST(request(new File([], "empty.wav", { type: "audio/wav" })))).status).toBe(400); expect(complete).not.toHaveBeenCalled(); });
   it("sends audio, the model, and Klarna context bias server-side", async () => {
-    complete.mockImplementation(async (input: { model: string; contextBias: string[] }) => { expect(input.model).toBe("voxtral-mini-latest"); expect(input.contextBias).toContain("authorizePayment"); expect(input.contextBias).toContain("onWidgetCancel"); expect(Array.isArray(input.contextBias)).toBe(true); return { text: "Klarna Network transcript" }; });
+    complete.mockImplementation(async (input: { model: string; language: string; contextBias: string[] }) => { expect(input.model).toBe("voxtral-mini-latest"); expect(input.language).toBe("en"); expect(input.contextBias).toContain("authorizePayment"); expect(input.contextBias).toContain("onWidgetCancel"); expect(Array.isArray(input.contextBias)).toBe(true); return { text: "Klarna Network transcript" }; });
     const response = await POST(request(new File(["audio"], "clip.webm", { type: "audio/webm;codecs=opus" }))); expect(response.status).toBe(200); expect(await response.json()).toEqual({ text: "Klarna Network transcript" });
   });
   it.each(["audio/ogg", "audio/wav"])("accepts %s", async (type: string) => { complete.mockResolvedValue({ text: "ok" }); expect((await POST(request(new File(["audio"], `clip.${type.split("/")[1]}`, { type })))).status).toBe(200); });
