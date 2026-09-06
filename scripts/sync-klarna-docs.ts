@@ -101,6 +101,10 @@ export function validateCorpus(chunks: DocChunk[], minimum = 10_000) {
   if (!chunks.length || stats.characters < minimum || descendants.size < 8 || stats.pages <= SEEDS.length || representedFamilies < 3) {
     throw new Error(`Klarna sync is suspiciously shallow: ${stats.pages} pages, ${stats.chunks} chunks, ${stats.characters} characters, ${descendants.size} descendant pages; refusing to replace the corpus.`);
   }
+  const searchable = chunks.map((chunk) => `${chunk.title}\n${chunk.heading}\n${chunk.text}`).join("\n").toLowerCase();
+  const requiredConcepts = ["mtls", "authorizepayment", "payment authorization", "payment presentation", "onwidgetcancel", "onabort", "network session token"];
+  const missing = requiredConcepts.filter((concept) => !searchable.includes(concept));
+  if (missing.length) throw new Error(`Klarna corpus is missing required official documentation concepts: ${missing.join(", ")}.`);
   return stats;
 }
 

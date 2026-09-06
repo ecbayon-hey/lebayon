@@ -3,6 +3,7 @@ import { klarnaDocDomains, searchIndex, type KlarnaDocDomain } from "@/lib/knowl
 import { extractRelevantSection } from "@/lib/knowledge/klarna-html";
 import type { Source } from "@/lib/stream/events";
 import * as cheerio from "cheerio";
+import { discoverOfficialKlarnaUrls } from "./perplexity";
 
 export { klarnaDocDomains };
 
@@ -39,6 +40,11 @@ async function officialDiscovery(query: string, limit = 3) {
         const scoped = officialUrl(match[0]); if (scoped) locations.add(scoped);
       }
     } catch { /* A controlled empty result is returned below. */ }
+  }
+  // Perplexity is permitted only to discover an official URL. Its prose is
+  // discarded; any evidence below is extracted from a direct Klarna fetch.
+  if (!locations.size || ![...locations].some((url) => words(query).some((term) => decodeURIComponent(url).toLowerCase().includes(term)))) {
+    for (const value of await discoverOfficialKlarnaUrls(query)) { const scoped = officialUrl(value); if (scoped) locations.add(scoped); }
   }
   const terms = [...new Set(words(query).filter((word) => word.length > 2))];
   const ranked = [...locations].map((url) => ({ url, score: terms.reduce((sum, term) => sum + (decodeURIComponent(url).toLowerCase().includes(term) ? 1 : 0), 0) }))
