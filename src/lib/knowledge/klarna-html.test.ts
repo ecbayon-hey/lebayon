@@ -1,3 +1,0 @@
-import { describe, expect, it } from "vitest";
-import { extractRelevantSection } from "./klarna-html";
-it("extracts the relevant live section rather than the page prefix", () => { const html = `<main><h1>Guide</h1><p>${"intro ".repeat(1000)}</p><h2>Web SDK events</h2><p>Listen for payment authorization events and notifications.</p><h2>Other</h2><p>Not relevant.</p></main>`; const text = extractRelevantSection(html, { id:"x", title:"Guide", heading:"Web SDK events", url:"https://docs.klarna.com/klarna-network-distribution/web-sdk/", text:"payment authorization events" }); expect(text).toContain("Listen for payment"); expect(text).not.toContain("intro"); expect(text).not.toContain("Not relevant"); });

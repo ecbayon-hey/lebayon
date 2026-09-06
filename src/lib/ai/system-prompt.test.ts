@@ -9,7 +9,7 @@ describe("LeBayon response contract", () => {
   });
   it("permits deep dives and requires direct tool calls", () => {
     expect(SYSTEM_PROMPT).toContain("DEEP is reserved for explicit requests");
-    expect(SYSTEM_PROMPT).toContain("OFFICIAL_KN_EVIDENCE");
+    expect(SYSTEM_PROMPT).toContain("CURRENT_KLARNA_DOCS");
     expect(SYSTEM_PROMPT).toContain("do not guess from model memory");
   });
   it("keeps injected context separate", () => {

@@ -9,19 +9,16 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "sync:kn-docs": "tsx scripts/sync-klarna-docs.ts",
-    "check:env": "node --env-file-if-exists=.env.local scripts/check-env.mjs",
-    "check:kn-docs": "tsx scripts/check-klarna-docs.ts",
-    "check:kn-corpus": "tsx scripts/check-klarna-corpus.ts"
+    "check:env": "node --env-file-if-exists=.env.local scripts/check-env.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "latest",
+    "@mistralai/mistralai": "latest",
     "@tailwindcss/postcss": "latest",
     "@vercel/analytics": "1.5.0",
     "cheerio": "latest",
     "lucide-react": "latest",
     "mermaid": "latest",
-    "minisearch": "latest",
     "next": "latest",
     "openai": "latest",
     "react": "latest",

@@ -1,51 +1,45 @@
 import "server-only";
-
+import { Mistral } from "@mistralai/mistralai";
 import { optionalSecret, optionalValue } from "@/lib/config/env";
 
 export const DEFAULT_STT_MODEL = "voxtral-mini-latest";
-export const MISTRAL_TRANSCRIPTIONS_ENDPOINT = "https://api.mistral.ai/v1/audio/transcriptions";
-
 export const KLARNA_CONTEXT_BIAS = [
   "Klarna", "Klarna Network", "KN", "KNST", "Klarna Network Session Token",
-  "Payment Presentation", "Payment Authorization", "authorizePayment", "Payment Request",
-  "Payment Transaction", "Network Session", "Acquiring Partner", "Partner Account", "mTLS",
-  "Web SDK", "onWidgetCancel", "onWidgetComplete", "onAbort", "SIWK",
+  "Network Session", "Payment Presentation", "Payment Authorization", "authorizePayment",
+  "Payment Request", "Payment Transaction", "Acquiring Partner", "Partner Account", "mTLS",
+  "Web SDK", "onWidgetCancel", "onWidgetComplete", "onWidgetError", "onAbort", "SIWK",
   "Sign in with Klarna", "OSM", "On-site Messaging",
 ];
 
+type SafeProviderMetadata = { status?: number; code?: string; param?: string; type?: string };
 export class TranscriptionError extends Error {
-  constructor(message: string, readonly status?: number, readonly providerCode?: string) {
-    super(message);
-    this.name = "TranscriptionError";
-  }
+  constructor(message: string, readonly metadata: SafeProviderMetadata = {}) { super(message); this.name = "TranscriptionError"; }
+  get status() { return this.metadata.status; }
 }
+
+const safeString = (value: unknown) => typeof value === "string" && /^[\w.-]{1,80}$/.test(value) ? value : undefined;
 
 export async function transcribeAudio(file: File) {
   const key = optionalSecret("MISTRAL_API_KEY");
   if (!key) throw new TranscriptionError("MISTRAL_API_KEY is not configured");
-
-  const body = new FormData();
-  body.append("model", optionalValue("MISTRAL_STT_MODEL", DEFAULT_STT_MODEL));
-  body.append("file", file, file.name);
-  // Mistral's multipart endpoint accepts context_bias as a JSON-encoded string array.
-  body.append("context_bias", JSON.stringify(KLARNA_CONTEXT_BIAS));
-
-  const response = await fetch(MISTRAL_TRANSCRIPTIONS_ENDPOINT, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${key}` },
-    body,
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!response.ok) {
-    let code: string | undefined;
-    try {
-      const json = await response.json() as { error?: { code?: unknown }; code?: unknown };
-      const raw = json.error?.code ?? json.code;
-      if (typeof raw === "string" && /^[\w.-]{1,80}$/.test(raw)) code = raw;
-    } catch { /* Provider response bodies are intentionally not exposed. */ }
-    throw new TranscriptionError("Mistral rejected the transcription", response.status, code);
+  const client = new Mistral({ apiKey: key });
+  try {
+    const response = await client.audio.transcriptions.complete({
+      model: optionalValue("MISTRAL_STT_MODEL", DEFAULT_STT_MODEL),
+      file,
+      contextBias: KLARNA_CONTEXT_BIAS,
+    });
+    if (typeof response.text !== "string") throw new TranscriptionError("Mistral returned a malformed transcription", { code: "malformed_response" });
+    return response.text.trim();
+  } catch (error) {
+    if (error instanceof TranscriptionError) throw error;
+    const value = error as { statusCode?: unknown; status?: unknown; body?: { object?: string; code?: unknown; param?: unknown; type?: unknown } };
+    const status = typeof value.statusCode === "number" ? value.statusCode : typeof value.status === "number" ? value.status : undefined;
+    throw new TranscriptionError("Mistral rejected the transcription", {
+      status,
+      code: safeString(value.body?.code),
+      param: safeString(value.body?.param),
+      type: safeString(value.body?.type),
+    });
   }
-  const json = await response.json() as { text?: unknown };
-  if (typeof json.text !== "string") throw new TranscriptionError("Mistral returned a malformed transcription", response.status, "malformed_response");
-  return json.text.trim();
 }

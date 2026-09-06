@@ -35,7 +35,18 @@ async function retrieveBeforeAnswer(route: RouteDecision, latest: string, emit: 
       emitSources(retry, emit);
     }
     emit({ type: "tool_finished", tool: "search_klarna_network_docs" });
-    return `OFFICIAL_KN_EVIDENCE\n${JSON.stringify(results)}\nEND_OFFICIAL_KN_EVIDENCE`;
+    const matches = results.flatMap((result) => result.matches);
+    console.info("KN retrieval", {
+      route: route.domain,
+      depth: route.depth,
+      queries: results.map((result) => result.query),
+      discoveredUrls: [...new Set(results.flatMap((result) => result.discoveredUrls))],
+      fetchedUrls: [...new Set(matches.map((match) => match.url))],
+      matchedHeadings: matches.map((match) => match.heading),
+      evidenceSections: matches.length,
+    });
+    if (!matches.length) return null;
+    return `CURRENT_KLARNA_DOCS\n${matches.map((match, index) => `SOURCE ${index + 1}\nURL: ${match.url}\nPAGE TITLE: ${match.title}\nSECTION: ${match.heading}\nCONTENT:\n${match.text}`).join("\n\n")}\nEND_CURRENT_KLARNA_DOCS`;
   }
   if (route.freshness === "current") {
     emit({ type: "tool_started", tool: "search_web", label: labels.search_web });
@@ -63,8 +74,12 @@ export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) 
   const route = routeRequest({ ...request, messages: recent });
   const latest = recent.at(-1)?.content ?? "";
   const evidence = await retrieveBeforeAnswer(route, latest, emit);
+  if (route.domain === "klarna" && !evidence) {
+    emit({ type: "text_delta", delta: "I couldn't retrieve the relevant Klarna Network docs just now." });
+    return;
+  }
   const messages: MessageParam[] = recent.map((message) => ({ role: message.role, content: message.content }));
-  const system = withContext(summary ?? "", await loadEddyNotes(), route, evidence);
+  const system = withContext(summary ?? "", await loadEddyNotes(), route, evidence ?? undefined);
   // Retrieval tools are deliberately unavailable after mandatory orchestration;
   // the answer model cannot opt out of, replace, or repeat the grounding step.
   const answerTools = toolDefinitions.filter((tool) => !["search_klarna_network_docs", "search_web"].includes(tool.name));

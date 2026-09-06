@@ -12,6 +12,8 @@ describe("request routing", () => {
     expect(route("Is mTLS mandatory for a Klarna Network Acquiring Partner?")).toMatchObject({ domain: "klarna", depth: "brief" });
     expect(route("We are integrating with Klarna Network", "Right", "Is mTLS mandatory?").domain).toBe("klarna");
     expect(route("What's the difference between onWidgetCancel and onAbort?").klarnaQueries).toContain("onWidgetCancel onAbort Web SDK callbacks");
+    expect(route("I forgot how to launch the klarna websdk")).toMatchObject({ domain: "klarna", depth: "brief" });
+    expect(route("where does authorizePayment sit in the flow?").domain).toBe("klarna");
   });
   it("routes current and deep visual requests structurally", () => {
     expect(route("Who won the F1 race this weekend?")).toMatchObject({ domain: "general", freshness: "current", depth: "brief" });

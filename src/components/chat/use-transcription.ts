@@ -4,11 +4,26 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 export type RecordingState = "idle" | "recording" | "transcribing" | "failed";
 
-type Resources = { stream?: MediaStream; recorder?: MediaRecorder; context?: AudioContext; timer?: ReturnType<typeof setInterval> };
-const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/mp4"];
+type Resources = { stream?: MediaStream; recorder?: MediaRecorder; context?: AudioContext; processor?: ScriptProcessorNode; sampleRate?: number; timer?: ReturnType<typeof setInterval> };
+const MIME_CANDIDATES = ["audio/webm;codecs=opus", "audio/webm", "audio/ogg;codecs=opus", "audio/ogg"];
 
 function supportedMimeType() {
   return MIME_CANDIDATES.find((type) => typeof MediaRecorder.isTypeSupported !== "function" || MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+/** Encodes mono browser PCM without ffmpeg; used when Safari only offers MP4 MediaRecorder. */
+export function encodeWav(chunks: Float32Array[], sampleRate: number) {
+  const samples = chunks.reduce((size, chunk) => size + chunk.length, 0);
+  const buffer = new ArrayBuffer(44 + samples * 2);
+  const view = new DataView(buffer);
+  const write = (offset: number, value: string) => [...value].forEach((character, index) => view.setUint8(offset + index, character.charCodeAt(0)));
+  write(0, "RIFF"); view.setUint32(4, 36 + samples * 2, true); write(8, "WAVE"); write(12, "fmt ");
+  view.setUint32(16, 16, true); view.setUint16(20, 1, true); view.setUint16(22, 1, true);
+  view.setUint32(24, sampleRate, true); view.setUint32(28, sampleRate * 2, true); view.setUint16(32, 2, true); view.setUint16(34, 16, true);
+  write(36, "data"); view.setUint32(40, samples * 2, true);
+  let offset = 44;
+  for (const chunk of chunks) for (const value of chunk) { view.setInt16(offset, Math.max(-1, Math.min(1, value)) * (value < 0 ? 0x8000 : 0x7fff), true); offset += 2; }
+  return new Blob([buffer], { type: "audio/wav" });
 }
 
 export function useTranscription(text: string, setText: (value: string) => void) {
@@ -18,6 +33,7 @@ export function useTranscription(text: string, setText: (value: string) => void)
   const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
   const resources = useRef<Resources>({});
   const chunks = useRef<Blob[]>([]);
+  const pcmChunks = useRef<Float32Array[]>([]);
   const prefix = useRef("");
   const run = useRef(0);
 
@@ -44,6 +60,7 @@ export function useTranscription(text: string, setText: (value: string) => void)
     const id = ++run.current;
     prefix.current = text;
     chunks.current = [];
+    pcmChunks.current = [];
     setError("");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } });
@@ -51,12 +68,22 @@ export function useTranscription(text: string, setText: (value: string) => void)
       const context = new AudioContext();
       const node = context.createAnalyser();
       node.fftSize = 512;
-      context.createMediaStreamSource(stream).connect(node);
+      const source = context.createMediaStreamSource(stream);
+      source.connect(node);
       const mimeType = supportedMimeType();
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
-      resources.current = { stream, context, recorder };
-      recorder.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
-      recorder.start(250);
+      let recorder: MediaRecorder | undefined;
+      let processor: ScriptProcessorNode | undefined;
+      if (mimeType) {
+        recorder = new MediaRecorder(stream, { mimeType });
+        recorder.ondataavailable = (event) => { if (event.data.size) chunks.current.push(event.data); };
+        recorder.start(250);
+      } else {
+        processor = context.createScriptProcessor(4096, 1, 1);
+        processor.onaudioprocess = (event) => pcmChunks.current.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        source.connect(processor);
+        processor.connect(context.destination);
+      }
+      resources.current = { stream, context, recorder, processor, sampleRate: context.sampleRate };
       resources.current.timer = setInterval(() => setElapsed((value) => value + 1), 1_000);
       setAnalyser(node);
       setState("recording");
@@ -67,20 +94,19 @@ export function useTranscription(text: string, setText: (value: string) => void)
   }, [fail, text]);
 
   const stop = useCallback(() => {
-    const recorder = resources.current.recorder;
-    if (!recorder || recorder.state === "inactive") return;
+    const { recorder, processor, sampleRate } = resources.current;
+    if ((!recorder || recorder.state === "inactive") && !processor) return;
     // Preserve the guard's narrowing across the asynchronous callback. Reading
     // the mutable ref again in onstop would correctly be considered optional.
-    const stoppedRecorder: MediaRecorder = recorder;
     const id = run.current;
     setState("transcribing");
-    stoppedRecorder.onstop = async () => {
-      const type = stoppedRecorder.mimeType || chunks.current[0]?.type || "audio/webm";
-      const blob = new Blob(chunks.current, { type });
+    const upload = async () => {
+      const type = recorder?.mimeType || chunks.current[0]?.type || "audio/wav";
+      const blob = recorder ? new Blob(chunks.current, { type }) : encodeWav(pcmChunks.current, sampleRate || 44_100);
       disposeAudio();
       try {
         const form = new FormData();
-        const extension = type.includes("ogg") ? "ogg" : type.includes("mp4") ? "m4a" : "webm";
+        const extension = blob.type.includes("ogg") ? "ogg" : blob.type.includes("wav") ? "wav" : "webm";
         form.append("file", blob, `recording.${extension}`);
         const response = await fetch("/api/transcribe", { method: "POST", body: form });
         const body = await response.json().catch(() => ({})) as { text?: string; error?: string };
@@ -94,7 +120,8 @@ export function useTranscription(text: string, setText: (value: string) => void)
         if (id === run.current) fail(caught instanceof Error ? caught.message : "The recording could not be transcribed.");
       }
     };
-    stoppedRecorder.stop();
+    if (recorder) { recorder.onstop = upload; recorder.stop(); }
+    else { if (processor) processor.onaudioprocess = null; void upload(); }
   }, [disposeAudio, fail, setText]);
 
   const cancel = useCallback(() => {
