@@ -4,7 +4,9 @@ import type { StreamEvent } from "@/lib/stream/events";
 import { chatRequestSchema } from "@/lib/validation/schemas";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+// Multi-page documentation research can require several sequential upstream
+// requests before the model synthesizes its answer.
+export const maxDuration = 300;
 
 type ErrorWithProviderMetadata = Error & {
   status?: number;
