@@ -100,7 +100,7 @@ export function useTranscription(text: string, setText: (value: string) => void)
   const cancel = useCallback(() => {
     run.current += 1;
     const recorder = resources.current.recorder;
-    if (recorder?.state !== "inactive") { recorder.onstop = null; recorder.stop(); }
+    if (recorder && recorder.state !== "inactive") { recorder.onstop = null; recorder.stop(); }
     disposeAudio();
     chunks.current = [];
     setError("");

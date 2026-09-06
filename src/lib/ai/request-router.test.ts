@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { routeRequest } from "./request-router";
 
-const route = (...content: string[]) => routeRequest({ messages: content.map((value, index) => ({ role: index % 2 ? "assistant" as const : "user" as const, content: value })) });
+const route = (...content: string[]) => routeRequest({ summary: "", messages: content.map((value, index) => ({ role: index % 2 ? "assistant" as const : "user" as const, content: value })) });
 
 describe("request routing", () => {
   it("does not treat general concepts as Klarna questions", () => {
