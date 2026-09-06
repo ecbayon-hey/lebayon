@@ -69,10 +69,13 @@ export function useTranscription(text: string, setText: (value: string) => void)
   const stop = useCallback(() => {
     const recorder = resources.current.recorder;
     if (!recorder || recorder.state === "inactive") return;
+    // Preserve the guard's narrowing across the asynchronous callback. Reading
+    // the mutable ref again in onstop would correctly be considered optional.
+    const stoppedRecorder: MediaRecorder = recorder;
     const id = run.current;
     setState("transcribing");
-    recorder.onstop = async () => {
-      const type = recorder.mimeType || chunks.current[0]?.type || "audio/webm";
+    stoppedRecorder.onstop = async () => {
+      const type = stoppedRecorder.mimeType || chunks.current[0]?.type || "audio/webm";
       const blob = new Blob(chunks.current, { type });
       disposeAudio();
       try {
@@ -91,13 +94,13 @@ export function useTranscription(text: string, setText: (value: string) => void)
         if (id === run.current) fail(caught instanceof Error ? caught.message : "The recording could not be transcribed.");
       }
     };
-    recorder.stop();
+    stoppedRecorder.stop();
   }, [disposeAudio, fail, setText]);
 
   const cancel = useCallback(() => {
     run.current += 1;
     const recorder = resources.current.recorder;
-    if (recorder?.state !== "inactive") { recorder.onstop = null; recorder.stop(); }
+    if (recorder && recorder.state !== "inactive") { recorder.onstop = null; recorder.stop(); }
     disposeAudio();
     chunks.current = [];
     setError("");

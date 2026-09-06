@@ -1,8 +1,8 @@
 import "server-only";
-import { klarnaDocDomains, searchIndex, type KlarnaDocDomain } from "@/lib/knowledge/klarna-index";
-import { extractRelevantSection } from "@/lib/knowledge/klarna-html";
+import { klarnaDocDomains, type KlarnaDocDomain } from "@/lib/knowledge/klarna-index";
 import type { Source } from "@/lib/stream/events";
 import * as cheerio from "cheerio";
+import { discoverOfficialKlarnaUrls } from "./perplexity";
 
 export { klarnaDocDomains };
 
@@ -14,6 +14,8 @@ const officialUrl = (input: string) => {
 
 async function officialDiscovery(query: string, limit = 3) {
   const locations = new Set<string>();
+  // Focused discovery URLs go first. Search output is never treated as evidence.
+  for (const value of await discoverOfficialKlarnaUrls(query)) { const scoped = officialUrl(value); if (scoped) locations.add(scoped); }
   const sitemapQueue = ["https://docs.klarna.com/sitemap.xml", "https://docs.klarna.com/sitemap-index.xml", "https://docs.klarna.com/sitemap_index.xml"];
   const seen = new Set<string>();
   while (sitemapQueue.length && seen.size < 30) {
@@ -21,7 +23,7 @@ async function officialDiscovery(query: string, limit = 3) {
     if (seen.has(url)) continue;
     seen.add(url);
     try {
-      const response = await fetch(url, { signal: AbortSignal.timeout(5_500), next: { revalidate: 3600 } });
+      const response = await fetch(url, { signal: AbortSignal.timeout(5_500), cache: "no-store" });
       if (!response.ok) continue;
       const $ = cheerio.load(await response.text(), { xmlMode: true });
       $("loc").each((_, node) => {
@@ -33,7 +35,7 @@ async function officialDiscovery(query: string, limit = 3) {
   }
   if (!locations.size) {
     try {
-      const response = await fetch(ROOT, { signal: AbortSignal.timeout(5_500), next: { revalidate: 3600 } });
+      const response = await fetch(ROOT, { signal: AbortSignal.timeout(5_500), cache: "no-store" });
       const html = (await response.text()).replace(/\\\//g, "/").replace(/\\u002[fF]/g, "/");
       for (const match of html.matchAll(/(?:https:\/\/docs\.klarna\.com)?\/klarna-network-distribution\/[a-zA-Z0-9_./%-]*/g)) {
         const scoped = officialUrl(match[0]); if (scoped) locations.add(scoped);
@@ -41,13 +43,13 @@ async function officialDiscovery(query: string, limit = 3) {
     } catch { /* A controlled empty result is returned below. */ }
   }
   const terms = [...new Set(words(query).filter((word) => word.length > 2))];
-  const ranked = [...locations].map((url) => ({ url, score: terms.reduce((sum, term) => sum + (decodeURIComponent(url).toLowerCase().includes(term) ? 1 : 0), 0) }))
-    .filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, limit * 3);
+  const ranked = [...locations].map((url, discoveryOrder) => ({ url, discoveryOrder, score: terms.reduce((sum, term) => sum + (decodeURIComponent(url).toLowerCase().includes(term) ? 1 : 0), 0) }))
+    .sort((a, b) => b.score - a.score || a.discoveryOrder - b.discoveryOrder).slice(0, Math.max(12, limit * 4));
   const pages = [];
   for (const candidate of ranked) {
     if (pages.length >= limit) break;
     try {
-      const response = await fetch(candidate.url, { signal: AbortSignal.timeout(5_500), next: { revalidate: Number(process.env.KN_DOCS_REVALIDATE_SECONDS || 3600) } });
+      const response = await fetch(candidate.url, { signal: AbortSignal.timeout(5_500), cache: "no-store" });
       if (!response.ok) continue;
       const $ = cheerio.load(await response.text()); $("script,style,nav,header,footer,aside,svg").remove();
       const main = $("main").first().length ? $("main").first() : $("article").first();
@@ -60,34 +62,15 @@ async function officialDiscovery(query: string, limit = 3) {
 }
 
 export async function searchKlarnaDocs(query: string, domain: KlarnaDocDomain = "all") {
-  const hits = searchIndex(query, 5, domain);
-  const queryTerms = words(query).filter((word) => word.length > 2);
-  const selected = hits.filter((hit) => queryTerms.some((term) => `${hit.title} ${hit.heading} ${hit.text}`.toLowerCase().includes(term))).slice(0, 3);
-  const verified = await Promise.all(selected.map(async (hit) => {
-    try {
-      const response = await fetch(hit.url, {
-        signal: AbortSignal.timeout(5_500),
-        next: { revalidate: Number(process.env.KN_DOCS_REVALIDATE_SECONDS || 3600) },
-      });
-      if (!response.ok) throw new Error(`HTTP ${response.status}`);
-      const text = extractRelevantSection(await response.text(), hit);
-      if (!text) throw new Error("Matching section was not present in the live page");
-      return { ...hit, text, evidence: "live" as const, liveVerified: true };
-    } catch {
-      return { ...hit, evidence: "bundled-stale" as const, liveVerified: false };
-    }
-  }));
-  // MiniSearch scores are query-relative. Zero relevant hits or only a very weak
-  // best hit triggers restricted discovery; fallback evidence is always fetched
-  // from the canonical official page and never from a search-engine summary.
-  const fallback = selected.length === 0 || (selected[0]?.score ?? 0) < 2 ? await officialDiscovery(query) : [];
-  const matches = fallback.length ? fallback : verified;
+  // The bundled corpus is intentionally not consulted here—not even as fallback
+  // evidence. Every KN request discovers and fetches the public docs afresh.
+  const matches = await officialDiscovery(query);
   const sources: Source[] = matches.map((hit) => ({ type: "klarna", title: hit.title, heading: hit.heading, url: hit.url }));
   return {
     query,
     domain,
     matches,
     sources,
-    note: fallback.length ? "The local corpus was weak, so current pages were discovered within the official Klarna Network documentation path and fetched directly." : "live means the canonical page was fetched and its matching section extracted; bundled-stale is snapshot fallback evidence after live verification failed.",
+    note: matches.length ? "Evidence was extracted from public Klarna documentation fetched for this request." : "No current public Klarna documentation evidence could be fetched. The bundled snapshot was not used.",
   };
 }
