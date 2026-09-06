@@ -3,7 +3,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 export type RecordingState = "idle" | "recording" | "transcribing" | "failed";
-type Resources = { stream?: MediaStream; recorder?: MediaRecorder; context?: AudioContext; timer?: ReturnType<typeof setInterval> };
+type Resources = {
+  stream?: MediaStream;
+  recorder?: MediaRecorder;
+  mimeType?: string;
+  context?: AudioContext;
+  timer?: ReturnType<typeof setInterval>;
+};
 
 export function useTranscription(text: string, setText: (value: string) => void) {
   const [state, setState] = useState<RecordingState>("idle");
@@ -50,10 +56,10 @@ export function useTranscription(text: string, setText: (value: string) => void)
       const node = context.createAnalyser();
       node.fftSize = 512;
       context.createMediaStreamSource(stream).connect(node);
-      resources.current = { stream, recorder, context };
+      resources.current = { stream, recorder, mimeType, context };
       resources.current.timer = setInterval(() => setElapsed((value) => value + 1), 1_000);
       setAnalyser(node);
-      recorder.start();
+      recorder.start(200);
       setState("recording");
     } catch (caught) {
       const denied = caught instanceof DOMException && caught.name === "NotAllowedError";
@@ -67,11 +73,11 @@ export function useTranscription(text: string, setText: (value: string) => void)
     const id = run.current;
     setState("transcribing");
     recorder.onstop = async () => {
-      const type = recorder.mimeType || "audio/webm";
-      const blob = new Blob(chunks.current, { type });
+      const mimeType = resources.current.mimeType || "audio/webm";
+      const blob = new Blob(chunks.current, { type: mimeType });
       dispose();
       try {
-        const extension = type.startsWith("audio/mp4") ? "m4a" : "webm";
+        const extension = mimeType.includes("mp4") ? "m4a" : "webm";
         const form = new FormData();
         form.append("audio", blob, `recording.${extension}`);
         form.append("language", "auto");
