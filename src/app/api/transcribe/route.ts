@@ -1,49 +1,68 @@
-import { transcribeAudio, TranscriptionError } from "@/lib/stt/mistral";
-
 export const runtime = "nodejs";
 
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
-export const SUPPORTED_AUDIO_TYPES = new Set([
-  "audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/flac",
-]);
+const MISTRAL_TRANSCRIPTIONS_URL = "https://api.mistral.ai/v1/audio/transcriptions";
+const EXTENSIONS: Record<string, string> = {
+  "audio/webm": "webm",
+  "audio/webm;codecs=opus": "webm",
+  "audio/mp4": "m4a",
+  "audio/ogg": "ogg",
+  "audio/ogg;codecs=opus": "ogg",
+  "audio/mpeg": "mp3",
+  "audio/wav": "wav",
+};
 
-export async function POST(request: Request) {
-  const length = Number(request.headers.get("content-length") || 0);
-  if (length > MAX_AUDIO_BYTES + 1024 * 32) return Response.json({ error: "Audio file is too large." }, { status: 413 });
+const encode = (value: string) => Buffer.from(value, "utf8");
 
-  let file: File;
+export async function POST(req: Request) {
+  const apiKey = process.env.MISTRAL_API_KEY?.trim();
+  if (!apiKey) return Response.json({ error: "Voice transcription is not configured on this deployment." }, { status: 503 });
+
+  let audioFile: File;
   try {
-    const form = await request.formData();
-    const candidate = form.get("file");
-    if (!(candidate instanceof File)) return Response.json({ error: "An audio file is required." }, { status: 400 });
-    file = candidate;
+    const form = await req.formData();
+    const audio = form.get("audio");
+    if (!(audio instanceof File)) return Response.json({ error: "An audio file is required." }, { status: 400 });
+    audioFile = audio;
   } catch {
     return Response.json({ error: "Invalid multipart form data." }, { status: 400 });
   }
-  const mime = file.type.toLowerCase().split(";")[0];
-  if (!SUPPORTED_AUDIO_TYPES.has(mime)) return Response.json({ error: "Unsupported audio format." }, { status: 415 });
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(file.name)) return Response.json({ error: "Invalid audio filename." }, { status: 400 });
-  if (!file.size) return Response.json({ error: "The recording is empty." }, { status: 400 });
-  if (file.size > MAX_AUDIO_BYTES) return Response.json({ error: "Audio file is too large." }, { status: 413 });
+
+  if (!audioFile.size) return Response.json({ error: "The recording is empty." }, { status: 400 });
+  if (audioFile.size > MAX_AUDIO_BYTES) return Response.json({ error: "Audio file is too large." }, { status: 413 });
+  const extension = EXTENSIONS[audioFile.type.toLowerCase()];
+  if (!extension) return Response.json({ error: "Unsupported audio format." }, { status: 415 });
+
+  const boundary = `----MistralBoundary${crypto.randomUUID().replaceAll("-", "")}`;
+  const audio = Buffer.from(await audioFile.arrayBuffer());
+  const fields = [
+    encode(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nvoxtral-mini-latest\r\n`),
+    encode(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\nauto\r\n`),
+    encode(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="recording.${extension}"\r\nContent-Type: ${audioFile.type}\r\n\r\n`),
+    audio,
+    encode(`\r\n--${boundary}--\r\n`),
+  ];
+  const body = Buffer.concat(fields);
 
   try {
-    return Response.json({ text: await transcribeAudio(file) }, { headers: { "Cache-Control": "no-store" } });
-  } catch (error) {
-    const provider = error instanceof TranscriptionError ? error : undefined;
-    console.error("STT failure", {
-      uploadedMime: mime,
-      bytes: file.size,
-      model: process.env.MISTRAL_STT_MODEL || "voxtral-mini-latest",
-      upstreamStatus: provider?.metadata.status,
-      providerMessage: provider?.metadata.message,
-      providerCode: provider?.metadata.code,
-      providerParam: provider?.metadata.param,
-      providerType: provider?.metadata.type,
-      requestId: provider?.metadata.requestId,
+    const response = await fetch(MISTRAL_TRANSCRIPTIONS_URL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": `multipart/form-data; boundary=${boundary}`,
+        "Content-Length": String(body.byteLength),
+      },
+      body,
     });
-    return Response.json(
-      { error: provider?.status === undefined ? "Voice transcription is not configured on this deployment." : "The recording could not be transcribed. Please try again." },
-      { status: provider?.status === undefined ? 503 : 502 },
-    );
+    if (!response.ok) {
+      console.error("Mistral transcription failed", { status: response.status, requestId: response.headers.get("x-request-id") });
+      return Response.json({ error: "The recording could not be transcribed. Please try again." }, { status: 502 });
+    }
+    const result = await response.json() as { text?: unknown };
+    if (typeof result.text !== "string") throw new Error("Malformed transcription response");
+    return Response.json({ text: result.text }, { headers: { "Cache-Control": "no-store" } });
+  } catch (error) {
+    console.error("Mistral transcription request failed", { reason: error instanceof Error ? error.message : "unknown" });
+    return Response.json({ error: "The recording could not be transcribed. Please try again." }, { status: 502 });
   }
 }

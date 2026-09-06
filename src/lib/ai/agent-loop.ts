@@ -3,59 +3,17 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, ToolResultBlockParam } from "@anthropic-ai/sdk/resources/messages/messages";
 import { withContext } from "./system-prompt";
 import { toolDefinitions, executeTool } from "./tools";
-import { routeRequest, type RouteDecision } from "./request-router";
 import { loadEddyNotes } from "@/lib/knowledge/eddy-knowledge";
-import { searchKlarnaDocs } from "@/lib/tools/klarna-docs";
-import { searchWeb } from "@/lib/tools/perplexity";
 import type { ChatRequest } from "@/lib/validation/schemas";
 import type { StreamEvent, Source } from "@/lib/stream/events";
 import { requiredSecret, optionalValue } from "@/lib/config/env";
 
-const labels: Record<string, string> = { search_klarna_network_docs: "Checking the Klarna Network docs…", search_web: "Searching the wider web…", generate_image: "Generating that masterpiece…", create_chart: "Plotting the numbers…" };
-const tokenBudget = (depth: RouteDecision["depth"]) => depth === "brief" ? 220 : depth === "normal" ? 700 : 2_400;
+const labels: Record<string, string> = { read_klarna_docs: "Reading the Klarna Network docs…", search_web: "Searching the wider web…", generate_image: "Generating that masterpiece…", create_chart: "Plotting the numbers…" };
 
 function emitSources(result: unknown, emit: (event: StreamEvent) => void) {
   if (result && typeof result === "object" && "sources" in result && Array.isArray(result.sources)) {
     for (const source of result.sources as Source[]) emit({ type: "source", source });
   }
-}
-
-async function retrieveBeforeAnswer(route: RouteDecision, latest: string, emit: (event: StreamEvent) => void) {
-  if (route.domain === "klarna") {
-    emit({ type: "tool_started", tool: "search_klarna_network_docs", label: labels.search_klarna_network_docs });
-    const results = [];
-    for (const query of route.klarnaQueries) {
-      const result = await searchKlarnaDocs(query, route.klarnaArea ?? "integration");
-      results.push(result);
-      emitSources(result, emit);
-    }
-    if (!results.some((result) => result.matches.length)) {
-      const retry = await searchKlarnaDocs(`${latest} official Klarna Network documentation`, route.klarnaArea ?? "integration");
-      results.push(retry);
-      emitSources(retry, emit);
-    }
-    emit({ type: "tool_finished", tool: "search_klarna_network_docs" });
-    const matches = results.flatMap((result) => result.matches);
-    console.info("KN retrieval", {
-      route: route.domain,
-      depth: route.depth,
-      queries: results.map((result) => result.query),
-      discoveredUrls: [...new Set(results.flatMap((result) => result.discoveredUrls))],
-      fetchedUrls: [...new Set(matches.map((match) => match.url))],
-      matchedHeadings: matches.map((match) => match.heading),
-      evidenceSections: matches.length,
-    });
-    if (!matches.length) return null;
-    return `CURRENT_KLARNA_DOCS\n${matches.map((match, index) => `SOURCE ${index + 1}\nURL: ${match.url}\nPAGE TITLE: ${match.title}\nSECTION: ${match.heading}\nCONTENT:\n${match.text}`).join("\n\n")}\nEND_CURRENT_KLARNA_DOCS`;
-  }
-  if (route.freshness === "current") {
-    emit({ type: "tool_started", tool: "search_web", label: labels.search_web });
-    const result = await searchWeb(latest);
-    emitSources(result, emit);
-    emit({ type: "tool_finished", tool: "search_web" });
-    return `GENERAL_WEB_EVIDENCE\n${JSON.stringify(result)}\nEND_GENERAL_WEB_EVIDENCE`;
-  }
-  return "";
 }
 
 export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) => void) {
@@ -71,22 +29,12 @@ export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) 
     emit({ type: "summary_update", summary });
   }
 
-  const route = routeRequest({ ...request, messages: recent });
-  const latest = recent.at(-1)?.content ?? "";
-  const evidence = await retrieveBeforeAnswer(route, latest, emit);
-  if (route.domain === "klarna" && !evidence) {
-    emit({ type: "text_delta", delta: "I couldn't retrieve the relevant Klarna Network docs just now." });
-    return;
-  }
   const messages: MessageParam[] = recent.map((message) => ({ role: message.role, content: message.content }));
-  const system = withContext(summary ?? "", await loadEddyNotes(), route, evidence ?? undefined);
-  // Retrieval tools are deliberately unavailable after mandatory orchestration;
-  // the answer model cannot opt out of, replace, or repeat the grounding step.
-  const answerTools = toolDefinitions.filter((tool) => !["search_klarna_network_docs", "search_web"].includes(tool.name));
+  const system = withContext(summary ?? "", await loadEddyNotes());
   const limit = Math.min(4, Math.max(1, Number(process.env.MAX_TOOL_ITERATIONS) || 4));
 
   for (let iteration = 0; iteration < limit; iteration++) {
-    const stream = client.messages.stream({ model, max_tokens: tokenBudget(route.depth), system, messages, tools: answerTools });
+    const stream = client.messages.stream({ model, max_tokens: 1_200, system, messages, tools: toolDefinitions });
     let buffered = "";
     stream.on("text", (text) => { buffered += text; });
     const answer = await stream.finalMessage();
@@ -104,7 +52,7 @@ export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) 
         const result = await executeTool(call.name, call.input);
         emitSources(result, emit);
         if (result && typeof result === "object" && "chart" in result) emit({ type: "chart", chart: result.chart });
-        if (result && typeof result === "object" && "url" in result && typeof result.url === "string") emit({ type: "image", url: result.url, alt: "alt" in result && typeof result.alt === "string" ? result.alt : "Generated image" });
+        if (call.name === "generate_image" && result && typeof result === "object" && "url" in result && typeof result.url === "string") emit({ type: "image", url: result.url, alt: "alt" in result && typeof result.alt === "string" ? result.alt : "Generated image" });
         results.push({ type: "tool_result", tool_use_id: call.id, content: JSON.stringify(result) });
       } catch (error) {
         results.push({ type: "tool_result", tool_use_id: call.id, is_error: true, content: error instanceof Error ? error.message : "Tool failed" });

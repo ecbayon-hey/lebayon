@@ -5,8 +5,8 @@ LeBayon is a general-purpose AI assistant with specialist expertise in Klarna Ne
 ## Architecture
 
 - **Next.js App Router + React + TypeScript** deploy directly to Vercel.
-- **Anthropic Messages API** runs a server-side tool loop (maximum six iterations by default) and streams typed SSE events to the browser.
-- **Klarna docs** are discovered and fetched live from the official Klarna Network documentation for every specialist request. Relevant semantic sections—not arbitrary page prefixes—become evidence, and no documentation snapshot is stored.
+- **Anthropic Messages API** runs a normal server-side tool loop and streams only the final answer to the browser.
+- **Klarna docs** are read live, one official page at a time, through `read_klarna_docs`. Claude chooses the page and may follow official links; there is no router, index, corpus, or snapshot.
 - **Perplexity** provides wider/current web research; **OpenAI GPT Image** provides inline generated images.
 - **Mistral Voxtral** transcribes completed MediaRecorder audio through the server-only `/api/transcribe` route. Web Audio drives the live waveform independently, and transcripts remain editable until Send is pressed.
 - Mermaid and validated Recharts artifacts render inline. Heavy Mermaid code is dynamically loaded.
@@ -30,14 +30,11 @@ Add the provider keys you intend to use. `ANTHROPIC_API_KEY` is required for cha
 | `PERPLEXITY_API_KEY` | Wider web research |
 | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` | Image generation |
 | `MISTRAL_API_KEY` | Server-only Mistral key used for standard audio transcription |
-| `MISTRAL_STT_MODEL` | Standard transcription model (default `voxtral-mini-latest`) |
-| `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at six) |
+| `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at four) |
 
 No provider master key is public. Never prefix one with `NEXT_PUBLIC_`.
 
-For Vercel, add `MISTRAL_API_KEY` and optionally
-`MISTRAL_STT_MODEL=voxtral-mini-latest` in **Project Settings → Environment
-Variables**, then redeploy. Neither variable is a `NEXT_PUBLIC_` variable. The browser records WebM/Opus or OGG where supported and encodes PCM as WAV on Safari/iOS rather than forwarding MP4. Only the completed recording is uploaded, with Klarna terminology supplied as context bias.
+For Vercel, add `MISTRAL_API_KEY` in **Project Settings → Environment Variables**, then redeploy. It is not a `NEXT_PUBLIC_` variable. The browser uses MediaRecorder with WebM/Opus, WebM, then MP4 fallback order. The completed recording and `language=auto` are uploaded, and the route sends a manual multipart request with an exact Content-Length to `voxtral-mini-latest`.
 
 Add practical internal context to `knowledge/eddy-notes.md`. Date and link notes where possible. Eddy notes are secondary context and never override current public API contracts.
 

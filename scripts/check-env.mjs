@@ -2,7 +2,7 @@ const providers = [
   ["Chat", ["ANTHROPIC_API_KEY"], ["ANTHROPIC_MODEL"]],
   ["Web research", ["PERPLEXITY_API_KEY"], []],
   ["Image generation", ["OPENAI_API_KEY"], ["OPENAI_IMAGE_MODEL"]],
-  ["Voice transcription", ["MISTRAL_API_KEY"], ["MISTRAL_STT_MODEL"]],
+  ["Voice transcription", ["MISTRAL_API_KEY"], []],
 ];
 
 const invalid = (value) => !value?.trim() || ["changeme", "replace-me", "your-api-key", "your_api_key"].includes(value.trim().toLowerCase());
