@@ -38,7 +38,7 @@ export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) 
   }
 
   const messages: MessageParam[] = recent.map((message) => ({ role: message.role, content: message.content }));
-  const system = withContext(summary ?? "", await loadEddyNotes());
+  const system = withContext(summary ?? "", await loadEddyNotes(), new Date(), request.timeZone);
   const limit = toolIterationLimit();
 
   for (let iteration = 0; iteration < limit; iteration++) {
