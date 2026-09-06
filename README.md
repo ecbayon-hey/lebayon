@@ -1,12 +1,12 @@
 # LeBayon
 
-LeBayon is a focused, session-only AI companion for Klarna Network Solution & Delivery colleagues. It combines Anthropic orchestration with an official-document-first grounding policy, live web research, inline images, diagrams, charts, and Mistral transcription—inside a tactile e-ink/blueprint chat interface.
+LeBayon is a general-purpose AI assistant with specialist expertise in Klarna Network Solution & Delivery. It combines Anthropic orchestration with an official-document-first grounding policy, live web research, inline images, diagrams, charts, and Mistral transcription—inside a tactile e-ink/blueprint chat interface.
 
 ## Architecture
 
 - **Next.js App Router + React + TypeScript** deploy directly to Vercel.
 - **Anthropic Messages API** runs a server-side tool loop (maximum six iterations by default) and streams typed SSE events to the browser.
-- **Klarna docs** use a generated MiniSearch corpus for discovery, followed by a cached server-side fetch of matching canonical pages whenever possible. Official docs outrank all other sources.
+- **Klarna docs** are discovered and fetched live from the official Klarna Network documentation for every specialist request. Relevant semantic sections—not arbitrary page prefixes—become evidence, and no documentation snapshot is stored.
 - **Perplexity** provides wider/current web research; **OpenAI GPT Image** provides inline generated images.
 - **Mistral Voxtral** transcribes completed MediaRecorder audio through the server-only `/api/transcribe` route. Web Audio drives the live waveform independently, and transcripts remain editable until Send is pressed.
 - Mermaid and validated Recharts artifacts render inline. Heavy Mermaid code is dynamically loaded.
@@ -31,26 +31,13 @@ Add the provider keys you intend to use. `ANTHROPIC_API_KEY` is required for cha
 | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` | Image generation |
 | `MISTRAL_API_KEY` | Server-only Mistral key used for standard audio transcription |
 | `MISTRAL_STT_MODEL` | Standard transcription model (default `voxtral-mini-latest`) |
-| `KN_DOCS_REVALIDATE_SECONDS` | Canonical documentation fetch cache (default 3600s) |
 | `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at six) |
 
 No provider master key is public. Never prefix one with `NEXT_PUBLIC_`.
 
 For Vercel, add `MISTRAL_API_KEY` and optionally
 `MISTRAL_STT_MODEL=voxtral-mini-latest` in **Project Settings → Environment
-Variables**, then redeploy. Neither variable is a `NEXT_PUBLIC_` variable. The
-browser records the best supported MediaRecorder format; only the completed
-recording is uploaded, with Klarna terminology supplied as context bias.
-
-## Klarna documentation corpus
-
-The committed `knowledge/generated/klarna-docs.json` makes development usable without a startup crawl. Regenerate it explicitly:
-
-```bash
-npm run sync:kn-docs
-```
-
-The crawler combines Klarna's official sitemap metadata with links embedded in the docs application's serialized navigation payload, then follows only `docs.klarna.com/klarna-network-distribution/` descendants. It refuses to overwrite the corpus when the result is merely the seven roots or lacks meaningful family/depth coverage. Set `KN_DOCS_MAX_PAGES` to bound a development crawl. Review the generated diff and its page, chunk, character, and family statistics before committing.
+Variables**, then redeploy. Neither variable is a `NEXT_PUBLIC_` variable. The browser records WebM/Opus or OGG where supported and encodes PCM as WAV on Safari/iOS rather than forwarding MP4. Only the completed recording is uploaded, with Klarna terminology supplied as context bias.
 
 Add practical internal context to `knowledge/eddy-notes.md`. Date and link notes where possible. Eddy notes are secondary context and never override current public API contracts.
 

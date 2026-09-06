@@ -4,7 +4,7 @@ export const runtime = "nodejs";
 
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export const SUPPORTED_AUDIO_TYPES = new Set([
-  "audio/webm", "audio/ogg", "audio/mp4", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/flac",
+  "audio/webm", "audio/ogg", "audio/mpeg", "audio/wav", "audio/x-wav", "audio/flac",
 ]);
 
 export async function POST(request: Request) {
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
   }
   const mime = file.type.toLowerCase().split(";")[0];
   if (!SUPPORTED_AUDIO_TYPES.has(mime)) return Response.json({ error: "Unsupported audio format." }, { status: 415 });
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(file.name)) return Response.json({ error: "Invalid audio filename." }, { status: 400 });
   if (!file.size) return Response.json({ error: "The recording is empty." }, { status: 400 });
   if (file.size > MAX_AUDIO_BYTES) return Response.json({ error: "Audio file is too large." }, { status: 413 });
 
@@ -29,7 +30,15 @@ export async function POST(request: Request) {
     return Response.json({ text: await transcribeAudio(file) }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     const provider = error instanceof TranscriptionError ? error : undefined;
-    console.error("STT transcription failed", { upstreamStatus: provider?.status, providerCode: provider?.providerCode, reason: provider?.message ?? "unexpected_error" });
+    console.error("STT failure", {
+      uploadedMime: mime,
+      bytes: file.size,
+      model: process.env.MISTRAL_STT_MODEL || "voxtral-mini-latest",
+      upstreamStatus: provider?.metadata.status,
+      providerCode: provider?.metadata.code,
+      providerParam: provider?.metadata.param,
+      providerType: provider?.metadata.type,
+    });
     return Response.json(
       { error: provider?.status === undefined ? "Voice transcription is not configured on this deployment." : "The recording could not be transcribed. Please try again." },
       { status: provider?.status === undefined ? 503 : 502 },
