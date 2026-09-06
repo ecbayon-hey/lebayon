@@ -30,7 +30,7 @@ Add the provider keys you intend to use. `ANTHROPIC_API_KEY` is required for cha
 | `PERPLEXITY_API_KEY` | Wider web research |
 | `OPENAI_API_KEY`, `OPENAI_IMAGE_MODEL` | Image generation |
 | `MISTRAL_API_KEY` | Server-only Mistral key used for standard audio transcription |
-| `MAX_TOOL_ITERATIONS` | Agent-loop safety cap (hard capped at four) |
+| `MAX_TOOL_ITERATIONS` | Research rounds allowed before a mandatory final answer (defaults to 10, hard capped at 20) |
 
 No provider master key is public. Never prefix one with `NEXT_PUBLIC_`.
 

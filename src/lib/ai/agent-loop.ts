@@ -9,6 +9,14 @@ import type { StreamEvent, Source } from "@/lib/stream/events";
 import { requiredSecret, optionalValue } from "@/lib/config/env";
 
 const labels: Record<string, string> = { read_klarna_docs: "Reading the Klarna Network docs…", search_web: "Searching the wider web…", generate_image: "Generating that masterpiece…", create_chart: "Plotting the numbers…" };
+const DEFAULT_TOOL_ITERATIONS = 10;
+const MAX_TOOL_ITERATIONS = 20;
+
+export function toolIterationLimit(value = process.env.MAX_TOOL_ITERATIONS) {
+  const configured = Number(value);
+  if (!Number.isInteger(configured) || configured < 1) return DEFAULT_TOOL_ITERATIONS;
+  return Math.min(configured, MAX_TOOL_ITERATIONS);
+}
 
 function emitSources(result: unknown, emit: (event: StreamEvent) => void) {
   if (result && typeof result === "object" && "sources" in result && Array.isArray(result.sources)) {
@@ -31,7 +39,7 @@ export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) 
 
   const messages: MessageParam[] = recent.map((message) => ({ role: message.role, content: message.content }));
   const system = withContext(summary ?? "", await loadEddyNotes());
-  const limit = Math.min(4, Math.max(1, Number(process.env.MAX_TOOL_ITERATIONS) || 4));
+  const limit = toolIterationLimit();
 
   for (let iteration = 0; iteration < limit; iteration++) {
     const stream = client.messages.stream({ model, max_tokens: 1_200, system, messages, tools: toolDefinitions });
@@ -60,5 +68,15 @@ export async function runAgent(request: ChatRequest, emit: (event: StreamEvent) 
     }
     messages.push({ role: "user", content: results });
   }
-  emit({ type: "text_delta", delta: "I hit the safe tool-call limit. Try narrowing the request." });
+
+  // The research budget is a limit on additional tool use, not on answering the
+  // user. Always give the model one tool-free turn to synthesize what it found.
+  const finalStream = client.messages.stream({
+    model,
+    max_tokens: 1_200,
+    system: `${system}\n\nYou have completed the available research steps. Answer the user now using the information gathered so far. Do not request another tool.`,
+    messages,
+  });
+  finalStream.on("text", (text) => emit({ type: "text_delta", delta: text }));
+  await finalStream.finalMessage();
 }
