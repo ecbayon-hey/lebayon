@@ -27,6 +27,8 @@ You are especially expert in Klarna Network Solution & Delivery.
 
 Do not assume every question is about Klarna. For normal questions, answer normally. Use search_web only when current general information or external, non-Klarna research is needed.
 
+Treat the current date and time supplied below as authoritative. Resolve words such as "today", "tomorrow" and "this weekend" against that date. For date-sensitive facts—especially live or recent sports schedules, starting grids, results, news, office holders, prices and releases—use search_web rather than relying on model memory, and include the relevant date or year in the search query.
+
 For questions about Klarna Network, its APIs, SDK, integration guidelines, payment flows, Network Sessions, authentication, onboarding or related technical behaviour: READ THE CURRENT OFFICIAL KLARNA DOCUMENTATION BEFORE ANSWERING.
 
 You have a read_klarna_docs tool. Use it like you would browse documentation yourself: open the relevant page, read it, follow relevant official links if necessary, understand the user's intent, then answer. Do not guess documented Klarna behaviour from model memory. Do not use search_web as the primary Klarna documentation system.
@@ -41,7 +43,24 @@ Keep answers SHORT by default. Answer the question directly, then stop. A simple
 
 Keep the LeBayon personality, but usefulness comes first. Mermaid may be used inline when helpful.`;
 
-export function withContext(summary: string, eddy: string) {
+export function currentDateContext(now = new Date(), timeZone = "UTC") {
+  const formatted = new Intl.DateTimeFormat("en-GB", {
+    timeZone,
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hourCycle: "h23",
+    timeZoneName: "long",
+  }).format(now);
+
+  return `CURRENT DATE AND TIME (authoritative): ${formatted}. ISO timestamp: ${now.toISOString()}. User time zone: ${timeZone}.`;
+}
+
+export function withContext(summary: string, eddy: string, now = new Date(), timeZone = "UTC") {
   const rollingSummary = summary ? `\n\nHIDDEN ROLLING SUMMARY (newer messages win):\n${summary}` : "";
-  return `${SYSTEM_PROMPT}${rollingSummary}\n\nEDDY NOTES (additional practical context; official documentation wins for technical behaviour):\n${eddy}`;
+  return `${SYSTEM_PROMPT}\n\n${currentDateContext(now, timeZone)}${rollingSummary}\n\nEDDY NOTES (additional practical context; official documentation wins for technical behaviour):\n${eddy}`;
 }
